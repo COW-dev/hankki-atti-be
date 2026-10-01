@@ -289,6 +289,17 @@ public class HelpRequest extends BaseTimeEntity {
 
 **작성 의무**: 새 서비스 로직 또는 기존 로직 변경 시 해당 부분의 테스트를 반드시 함께 작성한다 — 구현 완료의 정의에 테스트가 포함된다.
 
+**커버리지 기준** (라인 커버리지, JaCoCo)
+
+| 기준 | 수치 | 검사 위치 |
+|---|---|---|
+| PR 변경 코드 | 80% 이상 | CI `test` job의 diff-cover |
+| 프로젝트 전체 | 70% 이상 | `./gradlew check` (`build`에 포함) — 로컬에서도 실패한다 |
+
+- 측정 제외: `HankkiAttiApplication`, `global/config/**` — 제외 대상을 늘릴 때는 PR에 이유를 적는다
+- 리포트: `./gradlew test` 후 `build/reports/jacoco/test/html/index.html`
+- 기준 수치는 Google "Code Coverage Best Practices"(전체 75% commendable, 변경 코드 중심 관리)를 참고했다. 수치를 맞추기 위한 테스트가 아니라 동작을 검증하는 테스트를 쓴다
+
 **계층별 전략**
 
 | 계층 | 방식 | 도구 |
@@ -345,6 +356,7 @@ void apply_이미매칭된신청_예비번호부여() {
 - **PR 병합 방식**: **Squash and merge** — PR 제목이 곧 `main`의 최종 커밋 메시지가 된다
 - **PR 제목 컨벤션**: 커밋 제목과 동일한 형식(`type: 명사형 제목`)을 따른다
 - PR은 `.github/pull_request_template.md` 형식 준수
+- PR은 CI(`.github/workflows/ci.yml`의 `test`, `secret-scan`, `agent-config`)가 모두 통과해야 병합할 수 있다 — `test`에는 커버리지 기준(변경 80%, 전체 70%)이 포함된다
 
 ---
 
