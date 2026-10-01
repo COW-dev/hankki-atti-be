@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+#
+# pre-commit — AGENTS.md 절대 규칙 강제
+#   1. main 브랜치 직접 커밋 차단 (절대 규칙 3)
+#   2. 민감정보 커밋 차단 (절대 규칙 4)
+#
+
+set -u
+
+# 1. main 직접 커밋 차단
+# 훅이 없으면 커밋을 만든 뒤 push 단계에서야 문제를 알아채 되돌리는 비용이 생긴다.
+branch="$(git symbolic-ref --short HEAD 2>/dev/null || echo detached)"
+if [ "$branch" = "main" ]; then
+    echo "[pre-commit] 차단: main 브랜치에는 직접 커밋할 수 없습니다. 작업 브랜치를 생성하세요." >&2
+    echo "  git switch -c feat/작업명" >&2
+    exit 1
+fi
+
+# 2-a. 민감 파일 자체가 staged 되었는지 확인 (.env, 키/자격증명 파일)
+blocked_files='(^|/)\.env(\..*)?$|\.pem$|credentials'
+staged="$(git diff --cached --name-only)"
+if echo "$staged" | grep -qE "$blocked_files"; then
+    echo "[pre-commit] 차단: 민감정보 파일이 staged 되어 있습니다:" >&2
+    echo "$staged" | grep -E "$blocked_files" >&2
+    exit 1
+fi
+
+# 2-b. application*.yml에 리터럴 시크릿 값이 추가되는지 확인
+# ${ENV} 플레이스홀더와 ${ENV:기본값}은 허용한다. 기본값에는 로컬 전용 값만 쓴다.
+yml_secrets="$(git diff --cached -U0 -- '*application*.yml' | grep -E '^\+' \
+    | grep -iE '(password|secret|access-?key|secret-?key)\s*:' \
+    | grep -vE ':\s*(\$\{[A-Z_]+(:[^}]*)?\}|\s*$)' || true)"
+if [ -n "$yml_secrets" ]; then
+    echo "[pre-commit] 차단: application*.yml에 리터럴 시크릿 값이 감지됐습니다. \${ENV_VAR} 플레이스홀더를 사용하세요:" >&2
+    echo "$yml_secrets" >&2
+    exit 1
+fi
+
+# 2-c. gitleaks가 있으면 staged 스캔, 없으면 패턴 grep 폴백
+if command -v gitleaks &>/dev/null; then
+    if ! gitleaks protect --staged --no-banner --redact; then
+        echo "[pre-commit] 차단: gitleaks가 staged 변경에서 시크릿을 감지했습니다." >&2
+        exit 1
+    fi
+else
+    if git diff --cached -U0 -- . ':(exclude).githooks' | grep -E '^\+' | grep -qE 'AKIA[0-9A-Z]{16}|-----BEGIN (RSA |EC )?PRIVATE KEY-----|aws_secret_access_key'; then
+        echo "[pre-commit] 차단: staged 변경에서 시크릿 패턴이 감지됐습니다. (gitleaks 설치 권장: brew install gitleaks)" >&2
+        exit 1
+    fi
+fi
+
+exit 0
