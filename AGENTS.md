@@ -345,6 +345,7 @@ void apply_이미매칭된신청_예비번호부여() {
 - **PR 병합 방식**: **Squash and merge** — PR 제목이 곧 `main`의 최종 커밋 메시지가 된다
 - **PR 제목 컨벤션**: 커밋 제목과 동일한 형식(`type: 명사형 제목`)을 따른다
 - PR은 `.github/pull_request_template.md` 형식 준수
+- PR은 CI(`.github/workflows/ci.yml`의 `test`, `secret-scan`, `agent-config`)가 모두 통과해야 병합할 수 있다
 
 ---
 
