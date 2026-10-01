@@ -1,5 +1,6 @@
 plugins {
 	id 'java'
+	id 'jacoco'
 	id 'org.springframework.boot' version '4.1.1'
 	id 'io.spring.dependency-management' version '1.1.7'
 }
@@ -43,4 +44,47 @@ dependencies {
 tasks.named('test') {
 	useJUnitPlatform()
 	systemProperty 'user.timezone', 'Asia/Seoul'
+	finalizedBy jacocoTestReport
+}
+
+jacoco {
+	toolVersion = '0.8.15'
+}
+
+// 테스트할 로직이 없는 클래스는 커버리지 측정에서 제외한다
+def coverageExcludes = [
+	'com/hankkiatti/HankkiAttiApplication*',
+	'com/hankkiatti/global/config/**'
+]
+
+jacocoTestReport {
+	dependsOn test
+	reports {
+		xml.required = true
+		html.required = true
+	}
+	classDirectories.setFrom(files(classDirectories.files.collect {
+		fileTree(dir: it, exclude: coverageExcludes)
+	}))
+}
+
+// 전체 라인 커버리지 70% 미만이면 빌드 실패. PR 변경 코드 80% 기준은 CI의 diff-cover가 검사한다
+jacocoTestCoverageVerification {
+	dependsOn jacocoTestReport
+	classDirectories.setFrom(files(classDirectories.files.collect {
+		fileTree(dir: it, exclude: coverageExcludes)
+	}))
+	violationRules {
+		rule {
+			limit {
+				counter = 'LINE'
+				value = 'COVEREDRATIO'
+				minimum = 0.70
+			}
+		}
+	}
+}
+
+tasks.named('check') {
+	dependsOn jacocoTestCoverageVerification
 }

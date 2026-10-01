@@ -19,6 +19,7 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
@@ -46,6 +47,20 @@ public class GlobalExceptionHandler {
         String detail = summarizeDetails(details);
         String message = buildValidationMessage(detail);
         log.debug("제약 조건 위반: {}", detail);
+
+        return json(CommonErrorType.VALIDATION_FAILED, message);
+    }
+
+    // 컨트롤러 메서드 파라미터(@RequestParam, @PathVariable 등)에 붙은 제약 조건 위반
+    @ExceptionHandler(HandlerMethodValidationException.class)
+    public ResponseEntity<ApiResult<?>> handleHandlerMethodValidation(HandlerMethodValidationException exception) {
+        List<String> details = exception.getParameterValidationResults().stream()
+                .flatMap(result -> result.getResolvableErrors().stream()
+                        .map(error -> result.getMethodParameter().getParameterName() + ": " + error.getDefaultMessage()))
+                .toList();
+        String detail = summarizeDetails(details);
+        String message = buildValidationMessage(detail);
+        log.debug("파라미터 검증 오류: {}", detail);
 
         return json(CommonErrorType.VALIDATION_FAILED, message);
     }

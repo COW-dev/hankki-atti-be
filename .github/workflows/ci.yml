@@ -20,6 +20,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-java@v6
         with:
@@ -30,15 +32,34 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      # check 단계에서 전체 라인 커버리지 70% 미만이면 실패한다 (jacocoTestCoverageVerification)
       - name: Build and test
         run: ./gradlew build
+
+      - uses: actions/setup-python@v7
+        if: github.event_name == 'pull_request'
+        with:
+          python-version: '3.13'
+
+      - name: Diff coverage gate (변경 코드 80% 이상)
+        if: github.event_name == 'pull_request'
+        run: |
+          # 버전을 고정한다. 미고정 시 업스트림 변경만으로 게이트가 오작동할 수 있다.
+          pip install diff-cover==10.6.0
+          git fetch origin ${{ github.base_ref }}
+          diff-cover build/reports/jacoco/test/jacocoTestReport.xml \
+            --compare-branch origin/${{ github.base_ref }} \
+            --src-roots src/main/java \
+            --fail-under=80
 
       - name: Upload test reports on failure
         if: failure()
         uses: actions/upload-artifact@v7
         with:
           name: test-reports
-          path: build/reports/tests/test
+          path: |
+            build/reports/tests/test
+            build/reports/jacoco/test
           if-no-files-found: ignore
 
   secret-scan:
