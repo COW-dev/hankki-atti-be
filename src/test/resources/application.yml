@@ -1,0 +1,18 @@
+# 테스트용 설정 — MySQL 없이 H2로 context 로드
+
+spring:
+  application:
+    name: hankki-atti
+  datasource:
+    url: jdbc:h2:mem:testdb;MODE=MySQL;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: create-drop
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: Asia/Seoul
+        default_batch_fetch_size: 100
