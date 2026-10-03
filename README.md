@@ -23,6 +23,17 @@ Docker Desktop을 켠 상태에서 실행하면 `docker-compose.yml`의 MySQL �
 | `local` (기본) | 로컬 개발 | `application-local.yml`, docker compose MySQL |
 | `prod` | 배포 (현재는 팀 내부 개발 서버) | `application-prod.yml`, 환경 변수 `SPRING_DATASOURCE_*` 필요 |
 
+## Docker 이미지
+main에 병합되고 CI가 통과하면 `mjucow/hankki-atti-be:vX.Y.Z`(+ `latest`)가 Docker Hub에 올라갑니다. 버전·배포 규칙은 [AGENTS.md — 배포 (CD)](AGENTS.md#배포-cd)를 참고하세요.
+
+```bash
+docker run -d -p 8080:8080 \
+  -e SPRING_DATASOURCE_URL='jdbc:mysql://<host>:3306/hankki_atti_db?serverTimezone=Asia/Seoul&characterEncoding=UTF-8' \
+  -e SPRING_DATASOURCE_USERNAME=<user> \
+  -e SPRING_DATASOURCE_PASSWORD=<password> \
+  mjucow/hankki-atti-be:latest
+```
+
 ## 패키지 구조
 기능(도메인)별로 상위 폴더를 두고 그 아래에 계층을 나눕니다.
 

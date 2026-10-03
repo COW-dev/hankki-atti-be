@@ -360,6 +360,32 @@ void apply_이미매칭된신청_예비번호부여() {
 
 ---
 
+## 배포 (CD)
+
+main에 병합되고 CI 검사(`test`, `secret-scan`, `agent-config`)가 모두 통과하면 Docker 이미지를 Docker Hub에 push한다.
+
+| 항목 | 내용 |
+|---|---|
+| 이미지 | `mjucow/hankki-atti-be` (Docker Hub, private · 동아리 계정) |
+| 태그 | `vX.Y.Z` + `latest`. 버전 태그는 Docker Hub에서 불변(덮어쓰기 불가)으로 설정돼 있다 |
+| 플랫폼 | `linux/amd64`, `linux/arm64` |
+| Secrets | `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN` (Docker Hub Personal access token, Read & Write) |
+| 워크플로우 | `.github/workflows/ci.yml`의 `version` → `docker` job, 버전 계산은 `.github/scripts/release-version.sh` |
+
+**버전 규칙**
+- 병합마다 마이너를 올린다 (`v0.1.0` → `v0.2.0`). 마이너는 상한 없이 증가한다 (`v0.9.0` → `v0.10.0`)
+- 마지막 버전 이후 이미지에 들어가는 파일(`src/main`, `build.gradle`, `settings.gradle`, `gradle/`, `gradlew`, `Dockerfile`, `.dockerignore`)이 바뀌지 않았으면 배포하지 않는다 — 문서·CI·테스트만 바뀐 병합은 버전이 오르지 않는다
+- 메이저(`v1.0.0`)는 정식 운영 시작 때 사람이 main 커밋에 태그를 직접 찍는다. 이후 자동으로 `v1.1.0`부터 이어진다
+- git 태그를 먼저 push해 버전을 선점한 뒤 이미지를 push한다. 실패한 실행을 재실행하면 같은 버전으로 다시 시도한다
+
+**push 전 스모크 테스트**: 단위 테스트는 H2로 돌기 때문에, `docker` job에서 MySQL 8.4를 띄우고 이미지를 `prod` 프로필로 실행해 `/actuator/health`가 UP인지 확인한다. 실패하면 push하지 않는다.
+
+**이미지 실행에 필요한 환경 변수**: `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, `SPRING_DATASOURCE_PASSWORD`. 기본 프로필은 `prod`, 시간대는 Asia/Seoul로 고정, 포트 8080.
+
+**롤백**: 서버에서 이전 버전 태그를 pull해 다시 띄운다 (`docker pull mjucow/hankki-atti-be:vX.Y.Z`).
+
+---
+
 ## 절대 규칙
 
 다음 행동은 어떤 상황에서도 금지된다.
