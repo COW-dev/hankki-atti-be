@@ -1,0 +1,7 @@
+# 허용 목록 방식 — 이미지 빌드에 필요한 파일만 컨텍스트에 넣는다 (.env 등 시크릿 유입 차단)
+*
+!gradlew
+!gradle/
+!build.gradle
+!settings.gradle
+!src/main/
