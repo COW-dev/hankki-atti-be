@@ -10,9 +10,10 @@ on:
 permissions:
   contents: read
 
+# PR은 새 push가 오면 이전 실행을 취소하고, main은 배포가 중간에 끊기지 않도록 순서대로 실행한다
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
@@ -88,3 +89,115 @@ jobs:
           test -L .codex/commands && test -e .codex/commands || { echo "::error::.codex/commands 심링크 깨짐"; exit 1; }
           grep -q "@AGENTS.md" CLAUDE.md || { echo "::error::CLAUDE.md에 @AGENTS.md import 없음"; exit 1; }
           echo "OK"
+
+  # main 병합 후 모든 검사가 통과하면 배포 여부·버전을 정하고 git 태그로 버전을 선점한다
+  version:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [test, secret-scan, agent-config]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      release: ${{ steps.version.outputs.release }}
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: 배포 여부·버전 결정
+        id: version
+        run: bash .github/scripts/release-version.sh
+
+      # 이미지보다 태그를 먼저 push한다 — 동시에 같은 버전을 노리면 여기서 실패해 이미지가 덮어써지지 않는다
+      - name: 버전 태그 push
+        if: steps.version.outputs.new_tag == 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          git tag "$VERSION"
+          git push origin "$VERSION"
+
+  docker:
+    if: needs.version.outputs.release == 'true'
+    needs: version
+    runs-on: ubuntu-latest
+    env:
+      IMAGE_NAME: mjucow/hankki-atti-be
+      VERSION: ${{ needs.version.outputs.version }}
+
+    # 스모크 테스트용. 테스트는 H2라 실제 MySQL·prod 설정·Dockerfile 문제는 여기서만 잡힌다
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_DATABASE: hankki_atti_db
+          MYSQL_USER: hankki
+          MYSQL_PASSWORD: hankki
+          MYSQL_ROOT_PASSWORD: root
+          TZ: Asia/Seoul
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-qemu-action@v4
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: 스모크 테스트용 이미지 빌드 (amd64)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          tags: ${{ env.IMAGE_NAME }}:smoke
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: 스모크 테스트 (prod 프로필 + MySQL로 기동 후 health UP 확인)
+        run: |
+          docker run -d --name app --network host \
+            -e SPRING_DATASOURCE_URL='jdbc:mysql://127.0.0.1:3306/hankki_atti_db?serverTimezone=Asia/Seoul&characterEncoding=UTF-8' \
+            -e SPRING_DATASOURCE_USERNAME=hankki \
+            -e SPRING_DATASOURCE_PASSWORD=hankki \
+            "$IMAGE_NAME:smoke"
+          for _ in $(seq 1 45); do
+            # health가 DOWN이면 503이라 curl -f가 실패한다
+            if curl -fsS http://localhost:8080/actuator/health; then
+              echo; echo "기동 확인"; exit 0
+            fi
+            if [ "$(docker inspect -f '{{.State.Running}}' app)" != "true" ]; then
+              echo "::error::컨테이너가 기동 중 종료됨"; break
+            fi
+            sleep 2
+          done
+          docker logs app
+          exit 1
+
+      - name: 이미지 push (amd64 + arm64)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ env.VERSION }}
+            ${{ env.IMAGE_NAME }}:latest
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ env.VERSION }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
