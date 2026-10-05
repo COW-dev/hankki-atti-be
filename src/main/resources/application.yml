@@ -10,3 +10,10 @@ spring:
         jdbc:
           time_zone: Asia/Seoul
         default_batch_fetch_size: 100
+
+# 인증 설정 — 값 설명은 global/security/AuthProperties 참고
+auth:
+  jwt:
+    issuer: hankki-atti
+    access-token-ttl: 30m
+    refresh-token-ttl: 14d

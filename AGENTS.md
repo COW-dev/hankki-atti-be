@@ -74,7 +74,8 @@ com.hankkiatti
 │   ├── common/                 # BaseTimeEntity, LabeledEnum, AbstractEnumConverter 등 도메인 공통
 │   └── {도메인}/
 └── global/                     # 공통/인프라
-    ├── config/                 # Spring 설정 (Security, JPA Auditing, MySQL Dialect)
+    ├── config/                 # Spring 설정 (Security, JPA Auditing, MySQL Dialect, JWT, Clock)
+    ├── security/               # JWT 발급·검증, 인증 주체(AuthPrincipal), refresh 토큰 쿠키, 인증 오류 응답
     ├── exception/              # DomainException, GlobalExceptionHandler
     └── response/               # ApiResponse(팩토리), ApiResult(래퍼), type/
 ```
@@ -101,6 +102,7 @@ domain/{도메인}/
 domain/
 ├── common/       BaseTimeEntity, LabeledEnum, AbstractEnumConverter
 ├── account/      Account, AccountRole, AccountStatus
+├── auth/         RefreshToken, TokenAudience, 로그인·토큰·비밀번호 변경 API
 ├── student/      Student, DisabilityType, CredentialMailStatus
 ├── helper/       Helper
 ├── admin/        Admin, AdminGrade
@@ -207,10 +209,14 @@ public enum HelpRequestErrorType implements ErrorCode {
 
 ### 4. 공통 응답 구조
 
-`ApiResult<T>` — 실제 응답 본문 래퍼 (record: `resultType`, `httpStatusCode`, `message`, `data`)
+`ApiResult<T>` — 실제 응답 본문 래퍼 (record: `resultType`, `httpStatusCode`, `code`, `message`, `data`)
 `ApiResponse` — `ResponseEntity<ApiResult<T>>` 생성 팩토리 유틸
 `SuccessType` — 성공 응답 타입 enum
 `CommonErrorType` / `XxxErrorType` — 오류 응답 타입
+
+**오류 코드 (`code`)** — 실패 응답에만 있다. 프론트는 메시지 문구가 아니라 이 값으로 오류를 구분한다
+- `ErrorCode.getCode()`가 "{타입 이름}_{상수 이름}"으로 자동으로 만든다: `AuthErrorType.PASSWORD_CHANGE_REQUIRED` → `AUTH_PASSWORD_CHANGE_REQUIRED`, `CommonErrorType.NOT_FOUND` → `COMMON_NOT_FOUND`
+- 따로 코드를 적지 않는다. 대신 `XxxErrorType` 클래스·상수 이름을 바꾸면 API 변경이므로 PR 본문 "타 직군 전달 사항"에 적는다
 
 ```java
 // 컨트롤러 반환 패턴
@@ -283,6 +289,17 @@ public class HelpRequest extends BaseTimeEntity {
 - 읽기 메서드: `@Transactional(readOnly = true)` 개별 적용 (클래스 레벨 적용은 선택)
 - 의존성 주입: 생성자 주입만 허용 (`@Autowired` 필드 주입 금지)
 - admin/client 로직이 복잡하면 `service/admin/`, `service/client/` 패키지로 분리
+- 현재 시각은 `LocalDateTime.now(clock)` — `Clock` 빈을 주입받는다 (테스트에서 시각 고정)
+
+---
+
+### 8. 인증·인가
+
+- 로그인한 사용자는 컨트롤러에서 `@AuthenticationPrincipal AuthPrincipal principal`로 받는다 (`accountId`, `role`, `audience`)
+- 경로별 권한은 `SecurityConfig`에서 정한다: `/api/admin/**`은 관리자, 그 밖의 `/api/**`는 장애학생·도우미. 새 API는 이 규칙을 따르면 따로 설정할 것이 없다
+- 로그인 없이 열어야 하는 API는 `AuthPaths`에 추가한다 (`SecurityConfig` 수정 → 사람 리뷰 필수)
+- 관리자 권한 등급(전체/제한)은 토큰에 넣지 않는다. 등급이 필요한 API는 서비스에서 `Admin`을 조회해 확인한다
+- 비밀번호 규칙 검증은 `@Password` (+ `@NotBlank`)를 쓴다
 
 ---
 
