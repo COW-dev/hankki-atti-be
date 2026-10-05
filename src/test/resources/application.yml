@@ -16,3 +16,8 @@ spring:
         jdbc:
           time_zone: Asia/Seoul
         default_batch_fetch_size: 100
+
+mail:
+  outbox:
+    # 테스트 중 주기 발송이 끼어들지 않게 끈다. 필요한 테스트에서 MailRelay를 직접 호출한다
+    polling-enabled: false

@@ -103,6 +103,7 @@ domain/
 ├── common/       BaseTimeEntity, LabeledEnum, AbstractEnumConverter
 ├── account/      Account, AccountRole, AccountStatus
 ├── auth/         RefreshToken, TokenAudience, 로그인·토큰·비밀번호 변경 API
+├── mail/         MailOutbox, 메일 아웃박스 적재·발송(MailOutboxService, MailRelay)
 ├── student/      Student, DisabilityType, CredentialMailStatus
 ├── helper/       Helper
 ├── admin/        Admin, AdminGrade
@@ -300,6 +301,18 @@ public class HelpRequest extends BaseTimeEntity {
 - 로그인 없이 열어야 하는 API는 `AuthPaths`에 추가한다 (`SecurityConfig` 수정 → 사람 리뷰 필수)
 - 관리자 권한 등급(전체/제한)은 토큰에 넣지 않는다. 등급이 필요한 API는 서비스에서 `Admin`을 조회해 확인한다
 - 비밀번호 규칙 검증은 `@Password` (+ `@NotBlank`)를 쓴다
+
+---
+
+### 9. 메일·비동기·예약 작업
+
+- 메일은 `MailOutboxService.enqueue(...)`로 아웃박스에 적기만 한다. SMTP(`JavaMailSender`)를 직접 부르지 않는다
+  - 업무 트랜잭션 안에서 부르면 업무가 롤백될 때 메일도 사라진다. 커밋되면 메일 전용 스레드가 바로 보내고, 놓친 메일은 폴러가 10초마다 보낸다
+  - 실패하면 1분 간격으로 3번 재시도, 그래도 실패면 `MailFailedEvent` 발행. 발송 결과가 필요한 기능은 `MailSentEvent`·`MailFailedEvent`를 구독한다
+  - 수신자·본문은 로그에 남기지 않는다 (아웃박스 id·종류만)
+- 예약 작업은 `@Scheduled`로 만든다. 스케줄러 스레드는 4개(`spring.task.scheduling.pool.size`) — 한 작업이 오래 걸려도 다른 작업이 밀리지 않게 작업 안에서 오래 막히는 호출을 피한다
+- 비동기 작업은 용도별 스레드 풀을 따로 둔다 (`@Async("mailExecutor")`처럼 이름 지정). 이름 없는 `@Async`는 쓰지 않는다
+- 서버가 여러 대일 수 있으므로 예약 작업은 같은 대상을 두 서버가 동시에 처리해도 안전해야 한다 (조건부 UPDATE로 선점 등)
 
 ---
 

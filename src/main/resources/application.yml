@@ -1,6 +1,25 @@
 spring:
   application:
     name: hankki-atti
+  task:
+    scheduling:
+      # 기본 1개면 한 작업(메일 발송 등)이 늦어질 때 다른 예약 작업까지 밀린다
+      pool:
+        size: 4
+      thread-name-prefix: scheduling-
+      shutdown:
+        await-termination: true
+        await-termination-period: 30s
+  mail:
+    # 접속 정보(host·port·username·password)는 환경별 설정 또는 SPRING_MAIL_* 환경 변수로 넣는다
+    default-encoding: UTF-8
+    properties:
+      mail.smtp.auth: true
+      mail.smtp.starttls.enable: true
+      # SMTP가 응답하지 않을 때 메일 스레드가 오래 묶이지 않게
+      mail.smtp.connectiontimeout: 5000
+      mail.smtp.timeout: 10000
+      mail.smtp.writetimeout: 10000
   profiles:
     default: local
   jpa:
@@ -17,3 +36,19 @@ auth:
     issuer: hankki-atti
     access-token-ttl: 30m
     refresh-token-ttl: 14d
+
+mail:
+  # Gmail은 로그인한 계정 주소로만 보낼 수 있어 계정 주소를 그대로 쓴다
+  from-address: ${spring.mail.username:no-reply@hankki-atti.local}
+  outbox:
+    poll-interval: PT10S
+    batch-size: 20
+    # 1분 간격으로 3번 재시도 (총 4번 시도)
+    retry-delays: 1m,1m,1m
+    claim-timeout: 5m
+
+management:
+  health:
+    mail:
+      # SMTP 연결 문제로 서버 상태가 DOWN이 되면 쿠버네티스가 서버를 재시작한다. 메일은 아웃박스가 재시도한다
+      enabled: false
