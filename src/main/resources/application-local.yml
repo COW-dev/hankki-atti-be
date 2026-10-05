@@ -9,6 +9,8 @@ spring:
     password: ${SPRING_DATASOURCE_PASSWORD:hankki}
 
   jpa:
+    # enum 컬럼 CHECK 제약을 만들지 않는다 (NoColumnCheckMySQLDialect 주석 참고)
+    database-platform: com.hankkiatti.global.config.NoColumnCheckMySQLDialect
     hibernate:
       ddl-auto: update
     show-sql: true

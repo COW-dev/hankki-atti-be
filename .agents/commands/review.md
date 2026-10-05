@@ -39,7 +39,7 @@ git diff HEAD                 # 아직 커밋하지 않은 변경
 - [ ] Swagger import 충돌: `com.hankkiatti.global.response.ApiResponse` import, Swagger `@ApiResponse`는 FQN 사용했는가
 - [ ] Entity에 setter가 추가되지 않았는가
 - [ ] 신규 Entity가 `BaseTimeEntity`를 상속하는가
-- [ ] Entity Enum 필드에 `@Enumerated(EnumType.STRING)`이 적용됐는가
+- [ ] 새 enum에 `@Converter(autoApply = true)` 컨버터(`AbstractEnumConverter` 상속)가 있고, Entity Enum 필드에 `@Enumerated`를 쓰지 않았는가
 - [ ] Controller가 `ResponseEntity<ApiResult<T>>` 형식을 반환하는가
 - [ ] Controller가 `*ControllerDocs` 인터페이스를 implements 했는가
 - [ ] admin API 경로가 `/api/admin/...`인가, 사용자 앱 API가 `/api/...`인가

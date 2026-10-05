@@ -71,10 +71,10 @@ bash scripts/setup-hooks.sh   # Git 훅 활성화 (main 직접 커밋 차단·�
 com.hankkiatti
 ├── HankkiAttiApplication.java
 ├── domain/                     # 비즈니스 도메인
-│   ├── common/                 # BaseTimeEntity 등 도메인 공통
+│   ├── common/                 # BaseTimeEntity, LabeledEnum, AbstractEnumConverter 등 도메인 공통
 │   └── {도메인}/
 └── global/                     # 공통/인프라
-    ├── config/                 # Spring 설정 (Security, JPA Auditing)
+    ├── config/                 # Spring 설정 (Security, JPA Auditing, MySQL Dialect)
     ├── exception/              # DomainException, GlobalExceptionHandler
     └── response/               # ApiResponse(팩토리), ApiResult(래퍼), type/
 ```
@@ -95,6 +95,19 @@ domain/{도메인}/
 ```
 - admin/client 중 한쪽만 있는 도메인은 하위 패키지 없이 `controller/`에 바로 둬도 된다
 - 도메인 이름과 경계는 해당 기능을 처음 구현할 때 `/plan`에서 확정하고 이 섹션에 추가한다
+
+**도메인 목록**
+```
+domain/
+├── common/       BaseTimeEntity, LabeledEnum, AbstractEnumConverter
+├── account/      Account, AccountRole, AccountStatus
+├── student/      Student, DisabilityType, CredentialMailStatus
+├── helper/       Helper
+├── admin/        Admin, AdminGrade
+├── helprequest/  HelpRequest, HelpType, HelpRequestStatus, RequestCancelType
+└── application/  Application, ApplicationStatus, CancelReason, ApplicationAfterAction
+```
+- `Student`·`Helper`·`Admin`은 `Account`와 PK를 공유하는 1:1 프로필이다 (`@MapsId`)
 
 ---
 
@@ -224,7 +237,10 @@ ResponseEntity<ApiResult<HelpRequestResponseDto>> getRequest(...);
 - setter 금지, 상태 변경은 의미 있는 메서드로 (예: `match(...)`, `cancel(...)`)
 - 생성자는 package-level 또는 `public` 생성자 사용 (static factory 불필요)
 - `BaseTimeEntity` 상속 필수 (`createdAt`, `updatedAt` 자동 관리)
-- Enum 필드는 `@Enumerated(EnumType.STRING)` 사용
+- enum은 autoApply 컨버터로 VARCHAR 저장, `@Enumerated` 쓰지 않음 — `@Enumerated`는 MySQL에서 네이티브 `ENUM` 컬럼·값 목록 CHECK를 만들고, `ddl-auto: update`는 enum 값이 추가돼도 이를 갱신하지 않아 새 값 INSERT가 실패하기 때문
+  - enum마다 같은 패키지에 `XxxConverter extends AbstractEnumConverter<Xxx>` + `@Converter(autoApply = true)`를 둔다. 필드에는 `@Column(length = ...)`만 붙인다
+  - MySQL은 커스텀 Dialect(`NoColumnCheckMySQLDialect`)로 CHECK를 끈다 — 컨버터를 써도 Hibernate가 enum 값 목록으로 CHECK를 만들기 때문
+  - enum은 `LabeledEnum`을 구현해 한글 `label`을 둔다 (메일·알림 등 서버가 만드는 문장용)
 - 시각 필드는 `LocalDateTime` 사용 (서버·DB 타임존은 Asia/Seoul로 고정되어 있다)
 
 ```java
@@ -238,8 +254,7 @@ public class HelpRequest extends BaseTimeEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
+    @Column(nullable = false, length = 20)   // HelpRequestStatusConverter가 자동 적용
     private HelpRequestStatus status;
 
     // ... 필드
