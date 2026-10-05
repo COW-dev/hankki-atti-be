@@ -51,7 +51,7 @@ plan.md가 현재 작업과 일치하지 않습니다 (기준: <브랜치>@<SHA>
 | 동시성 | 매칭·취소·승격은 락 또는 유니크 제약으로 보장 |
 | 시각 타입 | `LocalDateTime` (Asia/Seoul 고정) |
 | admin/client 분리 | admin API `/api/admin/...`, 사용자 API `/api/...` |
-| Entity Enum 필드 | `@Enumerated(EnumType.STRING)` 필수 |
+| Entity Enum 필드 | autoApply 컨버터(`XxxConverter extends AbstractEnumConverter<Xxx>`)로 VARCHAR 저장, `@Enumerated` 금지 |
 
 - 새 파일 생성 시: 파일 경로와 생성 이유를 한 줄로 사용자에게 알림
 
