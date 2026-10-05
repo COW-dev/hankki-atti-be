@@ -21,3 +21,8 @@ mail:
   outbox:
     # 테스트 중 주기 발송이 끼어들지 않게 끈다. 필요한 테스트에서 MailRelay를 직접 호출한다
     polling-enabled: false
+
+meal:
+  scheduler:
+    # 테스트 중 1분 주기 처리가 끼어들지 않게 끈다. 필요한 테스트에서 MealTimeJob을 직접 호출한다
+    enabled: false
