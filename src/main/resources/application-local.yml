@@ -18,6 +18,13 @@ spring:
       hibernate:
         format_sql: true
 
+  mail:
+    # docker-compose의 Mailpit. 보낸 메일은 http://localhost:8025 에서 본다
+    host: localhost
+    port: 1025
+    properties:
+      mail.smtp.auth: false
+
   docker:
     compose:
       lifecycle-management: start-only
