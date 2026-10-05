@@ -107,7 +107,7 @@ domain/
 ├── student/      Student, DisabilityType, CredentialMailStatus
 ├── helper/       Helper
 ├── admin/        Admin, AdminGrade
-├── helprequest/  HelpRequest, HelpType, HelpRequestStatus, RequestCancelType
+├── helprequest/  HelpRequest, HelpType, HelpRequestStatus, RequestCancelType, 식사 시작·종료 자동 처리(MealTimeJob)
 └── application/  Application, ApplicationStatus, CancelReason, ApplicationAfterAction
 ```
 - `Student`·`Helper`·`Admin`은 `Account`와 PK를 공유하는 1:1 프로필이다 (`@MapsId`)
@@ -313,6 +313,8 @@ public class HelpRequest extends BaseTimeEntity {
 - 예약 작업은 `@Scheduled`로 만든다. 스케줄러 스레드는 4개(`spring.task.scheduling.pool.size`) — 한 작업이 오래 걸려도 다른 작업이 밀리지 않게 작업 안에서 오래 막히는 호출을 피한다
 - 비동기 작업은 용도별 스레드 풀을 따로 둔다 (`@Async("mailExecutor")`처럼 이름 지정). 이름 없는 `@Async`는 쓰지 않는다
 - 서버가 여러 대일 수 있으므로 예약 작업은 같은 대상을 두 서버가 동시에 처리해도 안전해야 한다 (조건부 UPDATE로 선점 등)
+- 시간 기반 자동 처리는 "시각이 지났는데 상태가 그대로인 건"을 찾아 처리한다 (놓친 건도 다음 실행에서 따라잡는다). 대상 ID만 먼저 조회하고, 한 건씩 별도 트랜잭션에서 `findByIdForUpdate`로 잠근 뒤 상태·시각을 다시 확인하고 바꾼다 — 사용자 요청과 겹쳐도 순서가 맞고, 한 건 실패가 다른 건에 번지지 않는다
+- 신청 상태를 바꾸는 작업(지원·취소·승격·자동 처리)은 모두 `HelpRequestRepository.findByIdForUpdate`로 신청 행을 잠근다
 
 ---
 
