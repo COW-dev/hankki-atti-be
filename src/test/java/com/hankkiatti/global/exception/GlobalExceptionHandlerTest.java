@@ -63,7 +63,8 @@ class GlobalExceptionHandlerTest {
                 .andExpect(jsonPath("$.resultType").value("SUCCESS"))
                 .andExpect(jsonPath("$.httpStatusCode").value(201))
                 .andExpect(jsonPath("$.message").value(SuccessType.CREATED.getMessage()))
-                .andExpect(jsonPath("$.data").value("한끼"));
+                .andExpect(jsonPath("$.data").value("한끼"))
+                .andExpect(jsonPath("$.code").doesNotExist());
     }
 
     @Test
@@ -82,6 +83,7 @@ class GlobalExceptionHandlerTest {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.resultType").value("FAIL"))
                 .andExpect(jsonPath("$.httpStatusCode").value(404))
+                .andExpect(jsonPath("$.code").value("TEST_NOT_FOUND"))
                 .andExpect(jsonPath("$.message").value(TestErrorType.NOT_FOUND.getMessage()))
                 .andExpect(content().string(not(containsString("secret-id"))));
     }
@@ -101,6 +103,7 @@ class GlobalExceptionHandlerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"\"}"))
                 .andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.code").value("COMMON_VALIDATION_FAILED"))
                 .andExpect(jsonPath("$.message").value(containsString("name")));
     }
 

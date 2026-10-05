@@ -21,3 +21,13 @@ spring:
   docker:
     compose:
       lifecycle-management: start-only
+
+auth:
+  jwt:
+    # 비워 두면 서버를 켤 때마다 임의 키를 쓴다 (재시작하면 다시 로그인)
+    secret: ${JWT_SECRET:}
+  refresh-cookie:
+    # 로컬은 http라 Secure 쿠키를 쓰지 않는다 (쿠키 이름에 __Host- 접두사도 붙지 않음)
+    secure: false
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
