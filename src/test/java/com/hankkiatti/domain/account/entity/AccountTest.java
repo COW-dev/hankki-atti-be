@@ -97,4 +97,14 @@ class AccountTest {
                 .extracting("errorCode")
                 .isEqualTo(AccountErrorType.ALREADY_ACTIVE);
     }
+
+    @Test
+    void normalizeLoginId_이메일_앞뒤공백제거하고소문자로() {
+        assertThat(Account.normalizeLoginId("  New.Helper@MJU.ac.kr ")).isEqualTo("new.helper@mju.ac.kr");
+    }
+
+    @Test
+    void normalizeLoginId_학번_앞뒤공백만제거() {
+        assertThat(Account.normalizeLoginId(" 60231234 ")).isEqualTo("60231234");
+    }
 }

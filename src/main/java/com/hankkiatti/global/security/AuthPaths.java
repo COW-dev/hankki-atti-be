@@ -17,6 +17,8 @@ public final class AuthPaths {
     public static final String ADMIN_LOGIN = "/api/admin/auth/login";
     public static final String ADMIN_REFRESH = "/api/admin/auth/refresh";
     public static final String ADMIN_LOGOUT = "/api/admin/auth/logout";
+    // 도우미 회원가입 — 로그인 전에 부르는 API라 공개
+    public static final String HELPER_SIGNUP = "/api/helpers/signup";
 
     private AuthPaths() {}
 
@@ -28,7 +30,8 @@ public final class AuthPaths {
                 paths.matcher(HttpMethod.POST, USER_LOGOUT),
                 paths.matcher(HttpMethod.POST, ADMIN_LOGIN),
                 paths.matcher(HttpMethod.POST, ADMIN_REFRESH),
-                paths.matcher(HttpMethod.POST, ADMIN_LOGOUT)
+                paths.matcher(HttpMethod.POST, ADMIN_LOGOUT),
+                paths.matcher(HttpMethod.POST, HELPER_SIGNUP)
         );
     }
 }

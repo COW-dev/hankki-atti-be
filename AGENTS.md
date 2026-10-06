@@ -105,7 +105,7 @@ domain/
 ├── auth/         RefreshToken, TokenAudience, 로그인·토큰·비밀번호 변경 API
 ├── mail/         MailOutbox, 메일 아웃박스 적재·발송(MailOutboxService, MailRelay)
 ├── student/      Student, DisabilityType, CredentialMailStatus
-├── helper/       Helper
+├── helper/       Helper, 도우미 회원가입(HelperSignupService, 공개 경로 `/api/helpers/signup`)
 ├── admin/        Admin, AdminGrade
 ├── helprequest/  HelpRequest, HelpType, HelpRequestStatus, RequestCancelType, 식사 시작·종료 자동 처리(MealTimeJob)
 └── application/  Application, ApplicationStatus, CancelReason, ApplicationAfterAction
