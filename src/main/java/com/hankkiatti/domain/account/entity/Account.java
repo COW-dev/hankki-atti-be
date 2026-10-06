@@ -10,6 +10,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.LocalDateTime;
+import java.util.Locale;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -59,6 +60,15 @@ public class Account extends BaseTimeEntity {
         this.mustChangePassword = mustChangePassword;
         this.accessibilityMode = accessibilityMode;
         this.tokenVersion = 0;
+    }
+
+    /**
+     * 로그인 아이디를 저장·조회 전에 같은 모양으로 맞춘다. 앞뒤 공백을 지우고, 이메일(도우미)은 소문자로 바꾼다 —
+     * 가입 때 "Helper@mju.ac.kr"로 적고 로그인 때 소문자로 적어도 같은 계정으로 보이게.
+     */
+    public static String normalizeLoginId(String raw) {
+        String trimmed = raw.trim();
+        return trimmed.contains("@") ? trimmed.toLowerCase(Locale.ROOT) : trimmed;
     }
 
     public void changePassword(String newHash) {

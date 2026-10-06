@@ -92,7 +92,7 @@ public class AuthService {
      * 아이디·비밀번호가 틀리면 같은 응답을 준다. 비활성 계정 안내는 비밀번호가 맞을 때만 준다 — 계정 존재 여부가 드러나지 않게.
      */
     private Account authenticate(LoginRequestDto request, TokenAudience audience) {
-        Account account = accountRepository.findByLoginId(request.loginId().trim())
+        Account account = accountRepository.findByLoginId(Account.normalizeLoginId(request.loginId()))
                 .filter(found -> audience.allows(found.getRole()))
                 .orElse(null);
 
