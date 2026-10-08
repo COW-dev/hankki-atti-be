@@ -39,7 +39,7 @@ import lombok.NoArgsConstructor;
 public class HelpRequest extends BaseTimeEntity {
 
     // 이용 시간은 식사 시작부터 1시간으로 고정이다
-    private static final long USAGE_HOURS = 1;
+    public static final long USAGE_HOURS = 1;
     private static final long NO_SHOW_REPORT_HOURS = 24;
 
     @Id
