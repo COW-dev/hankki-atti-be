@@ -9,10 +9,15 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import com.hankkiatti.domain.account.entity.AccountRole;
+import com.hankkiatti.domain.application.entity.Application;
+import com.hankkiatti.domain.application.repository.ApplicationRepository;
 import com.hankkiatti.domain.auth.exception.AuthErrorType;
 import com.hankkiatti.domain.auth.exception.AuthException;
+import com.hankkiatti.domain.helper.entity.Helper;
 import com.hankkiatti.domain.helprequest.dto.request.HelpRequestCreateRequestDto;
 import com.hankkiatti.domain.helprequest.dto.response.HelpRequestCreateResponseDto;
+import com.hankkiatti.domain.helprequest.dto.response.MyHelpRequestResponseDto;
+import com.hankkiatti.domain.helprequest.dto.response.MyHelpRequestsResponseDto;
 import com.hankkiatti.domain.helprequest.entity.HelpRequest;
 import com.hankkiatti.domain.helprequest.entity.HelpRequestStatus;
 import com.hankkiatti.domain.helprequest.entity.HelpType;
@@ -27,6 +32,7 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
@@ -52,13 +58,16 @@ class HelpRequestServiceTest {
     @Mock
     private StudentRepository studentRepository;
 
+    @Mock
+    private ApplicationRepository applicationRepository;
+
     private HelpRequestService helpRequestService;
 
     @BeforeEach
     void setUp() {
         Clock clock = Clock.fixed(MONDAY.atTime(9, 0).atZone(SEOUL).toInstant(), SEOUL);
-        helpRequestService = new HelpRequestService(helpRequestRepository, studentRepository, new HelpRequestSchedule(),
-                clock);
+        helpRequestService = new HelpRequestService(helpRequestRepository, studentRepository, applicationRepository,
+                new HelpRequestSchedule(), clock);
     }
 
     private void givenStudentWithoutOverlap(LocalDateTime startAt) {
@@ -155,5 +164,108 @@ class HelpRequestServiceTest {
                 .isInstanceOf(AuthException.class)
                 .extracting("errorCode").isEqualTo(AuthErrorType.ACCESS_DENIED);
         verify(helpRequestRepository, never()).save(any());
+    }
+
+    // ---- 내 신청 조회 (지금 = 2026-10-12(월) 09:00) ----
+
+    private Student myStudent() {
+        return TestProfiles.student(TestAccounts.withId(STUDENT_ID, AccountRole.STUDENT, "hash", false));
+    }
+
+    private HelpRequest requestWithId(Long id, Student student, LocalDateTime startAt) {
+        HelpRequest request = new HelpRequest(student, startAt, Set.of(HelpType.SEATING, HelpType.SERVING), null, null);
+        ReflectionTestUtils.setField(request, "id", id);
+        return request;
+    }
+
+    private Application matchedApplication(Long id, HelpRequest request, Helper helper) {
+        Application application = new Application(request, helper, request.getStartAt().minusDays(1));
+        application.match(request.getStartAt().minusDays(1));
+        ReflectionTestUtils.setField(application, "id", id);
+        return application;
+    }
+
+    @Test
+    void getMyRequests_진행중은다가오는가까운순_끝난건지난최근순_매칭건만도우미() {
+        // given
+        Student student = myStudent();
+        Helper helper = TestProfiles.helper(TestAccounts.withId(9L, AccountRole.HELPER, "hash", false), "60230001");
+        HelpRequest laterRecruiting = requestWithId(1L, student, NOON.plusDays(2));
+        HelpRequest soonMatched = requestWithId(2L, student, NOON);
+        soonMatched.match(NOON.minusDays(1));
+        HelpRequest withdrawnFuture = requestWithId(3L, student, NOON.plusDays(1));
+        withdrawnFuture.withdraw(NOON.minusDays(1));
+        HelpRequest failedPast = requestWithId(4L, student, NOON.minusDays(3));
+        failedPast.fail();
+        HelpRequest completedPast = requestWithId(5L, student, NOON.minusDays(1));
+        completedPast.match(NOON.minusDays(2));
+        completedPast.complete(NOON.minusDays(1).plusHours(1));
+        given(studentRepository.existsById(STUDENT_ID)).willReturn(true);
+        given(helpRequestRepository.findByStudentAccountId(STUDENT_ID))
+                .willReturn(List.of(laterRecruiting, soonMatched, withdrawnFuture, failedPast, completedPast));
+        given(applicationRepository.findMatchedWithHelper(List.of(1L, 2L, 3L, 4L, 5L)))
+                .willReturn(List.of(matchedApplication(20L, soonMatched, helper)));
+
+        // when
+        MyHelpRequestsResponseDto result = helpRequestService.getMyRequests(STUDENT_ID);
+
+        // then
+        assertThat(result.upcoming()).extracting(MyHelpRequestResponseDto::id).containsExactly(2L, 1L);
+        assertThat(result.past()).extracting(MyHelpRequestResponseDto::id).containsExactly(3L, 5L, 4L);
+        MyHelpRequestResponseDto matched = result.upcoming().get(0);
+        assertThat(matched.helper().name()).isEqualTo("이도움");
+        assertThat(matched.helper().kakaoId()).isEqualTo("kakao_helper");
+        assertThat(matched.helpTypes()).containsExactly(HelpType.SERVING, HelpType.SEATING);
+        assertThat(result.upcoming().get(1).helper()).isNull();
+    }
+
+    @Test
+    void getMyRequests_이용완료24시간이내만_노쇼신고가능과마감시각() {
+        // given — 어제 13:00 이용 완료(마감 오늘 13:00), 그제 13:00 이용 완료(마감 지남)
+        Student student = myStudent();
+        HelpRequest yesterday = requestWithId(1L, student, NOON.minusDays(1));
+        yesterday.match(NOON.minusDays(2));
+        yesterday.complete(NOON.minusDays(1).plusHours(1));
+        HelpRequest twoDaysAgo = requestWithId(2L, student, NOON.minusDays(2));
+        twoDaysAgo.match(NOON.minusDays(3));
+        twoDaysAgo.complete(NOON.minusDays(2).plusHours(1));
+        given(studentRepository.existsById(STUDENT_ID)).willReturn(true);
+        given(helpRequestRepository.findByStudentAccountId(STUDENT_ID)).willReturn(List.of(yesterday, twoDaysAgo));
+        given(applicationRepository.findMatchedWithHelper(List.of(1L, 2L))).willReturn(List.of());
+
+        // when
+        MyHelpRequestsResponseDto result = helpRequestService.getMyRequests(STUDENT_ID);
+
+        // then
+        assertThat(result.past().get(0).noShowReportable()).isTrue();
+        assertThat(result.past().get(0).noShowDeadline()).isEqualTo(NOON.plusHours(1));
+        assertThat(result.past().get(1).noShowReportable()).isFalse();
+        assertThat(result.past().get(1).noShowDeadline()).isNull();
+    }
+
+    @Test
+    void getMyRequests_신청없음_빈두목록이고지원조회안함() {
+        // given
+        given(studentRepository.existsById(STUDENT_ID)).willReturn(true);
+        given(helpRequestRepository.findByStudentAccountId(STUDENT_ID)).willReturn(List.of());
+
+        // when
+        MyHelpRequestsResponseDto result = helpRequestService.getMyRequests(STUDENT_ID);
+
+        // then
+        assertThat(result.upcoming()).isEmpty();
+        assertThat(result.past()).isEmpty();
+        verify(applicationRepository, never()).findMatchedWithHelper(any());
+    }
+
+    @Test
+    void getMyRequests_장애학생이아닌계정_ACCESS_DENIED() {
+        // given
+        given(studentRepository.existsById(2L)).willReturn(false);
+
+        // when & then
+        assertThatThrownBy(() -> helpRequestService.getMyRequests(2L))
+                .isInstanceOf(AuthException.class)
+                .extracting("errorCode").isEqualTo(AuthErrorType.ACCESS_DENIED);
     }
 }
