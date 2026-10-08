@@ -46,7 +46,7 @@ class MailRelayTest {
 
     @BeforeEach
     void setUp() {
-        MailProperties properties = new MailProperties("no-reply@test", "한끼아띠",
+        MailProperties properties = new MailProperties("no-reply@test", "한끼아띠", "http://localhost:3000",
                 new MailProperties.Outbox(20, List.of(Duration.ofMinutes(1)), Duration.ofMinutes(5)));
         Clock clock = Clock.fixed(NOW.atZone(SEOUL).toInstant(), SEOUL);
         mailRelay = new MailRelay(mailOutboxRepository, mailOutboxRecorder, smtpMailClient, properties, clock);

@@ -40,6 +40,8 @@ auth:
 mail:
   # Gmail은 로그인한 계정 주소로만 보낼 수 있어 계정 주소를 그대로 쓴다
   from-address: ${spring.mail.username:no-reply@hankki-atti.local}
+  # 메일 본문 링크(비밀번호 재설정 등)의 기준 주소 = 사용자 앱 주소
+  link-base-url: ${MAIL_LINK_BASE_URL:http://localhost:3000}
   outbox:
     poll-interval: PT10S
     batch-size: 20
