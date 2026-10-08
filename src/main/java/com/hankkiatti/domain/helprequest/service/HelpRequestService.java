@@ -1,6 +1,7 @@
 package com.hankkiatti.domain.helprequest.service;
 
 import com.hankkiatti.domain.application.entity.Application;
+import com.hankkiatti.domain.application.entity.ApplicationStatus;
 import com.hankkiatti.domain.application.repository.ApplicationRepository;
 import com.hankkiatti.domain.auth.exception.AuthErrorType;
 import com.hankkiatti.domain.auth.exception.AuthException;
@@ -109,17 +110,44 @@ public class HelpRequestService {
      */
     @Transactional
     public MyHelpRequestResponseDto withdraw(Long accountId, Long helpRequestId) {
-        requireStudent(accountId);
-        HelpRequest request = helpRequestRepository.findByIdForUpdate(helpRequestId)
-                .filter(found -> found.isRequestedBy(accountId))
-                .orElseThrow(() -> new HelpRequestException(HelpRequestErrorType.NOT_FOUND,
-                        "helpRequestId=" + helpRequestId + ", accountId=" + accountId));
+        HelpRequest request = findMyRequestForUpdate(accountId, helpRequestId);
 
         LocalDateTime now = LocalDateTime.now(clock);
         request.withdraw(now);
         log.info("신청 철회: helpRequestId={}, studentId={}", helpRequestId, accountId);
         // 모집 중이던 신청이라 매칭된 도우미가 없다
         return toMyRequest(request, null, now);
+    }
+
+    /**
+     * 이용 완료 후 24시간 안에 "도우미가 오지 않았어요"를 신고한다 (기능명세서 "노쇼 신고"). 신청과 지원 모두 노쇼가 되고
+     * 도우미 봉사시간은 0이 된다. 센터 승인 없이 바로 바뀌고, 센터는 취소·노쇼 이력을 보고 사후에 판단한다.
+     */
+    @Transactional
+    public MyHelpRequestResponseDto reportNoShow(Long accountId, Long helpRequestId) {
+        HelpRequest request = findMyRequestForUpdate(accountId, helpRequestId);
+
+        LocalDateTime now = LocalDateTime.now(clock);
+        request.reportNoShow(now);
+        List<Application> completed =
+                applicationRepository.findByHelpRequestIdAndStatus(helpRequestId, ApplicationStatus.COMPLETED);
+        if (completed.isEmpty()) {
+            log.warn("이용 완료 지원이 없는 신청을 노쇼로 처리: helpRequestId={}", helpRequestId);
+        }
+        completed.forEach(Application::markNoShow);
+
+        log.info("노쇼 신고: helpRequestId={}, studentId={}", helpRequestId, accountId);
+        Helper helper = completed.isEmpty() ? null : completed.get(0).getHelper();
+        return toMyRequest(request, helper, now);
+    }
+
+    // 장애학생 본인의 신청을 신청 행 락으로 가져온다. 없는 신청과 남의 신청은 같은 404로 응답한다
+    private HelpRequest findMyRequestForUpdate(Long accountId, Long helpRequestId) {
+        requireStudent(accountId);
+        return helpRequestRepository.findByIdForUpdate(helpRequestId)
+                .filter(found -> found.isRequestedBy(accountId))
+                .orElseThrow(() -> new HelpRequestException(HelpRequestErrorType.NOT_FOUND,
+                        "helpRequestId=" + helpRequestId + ", accountId=" + accountId));
     }
 
     private void requireStudent(Long accountId) {

@@ -60,4 +60,16 @@ public interface HelpRequestControllerDocs {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "HELP_REQUEST_INVALID_STATUS — 모집 중이 아니거나 식사가 이미 시작됨")
     ResponseEntity<ApiResult<MyHelpRequestResponseDto>> withdraw(@Parameter(hidden = true) AuthPrincipal principal,
                                                                 @Parameter(description = "신청 ID") Long helpRequestId);
+
+    @Operation(summary = "노쇼 신고", description = """
+            이용 완료 후 24시간(정각 포함)까지 "도우미가 오지 않았어요"를 신고한다. 신청과 도우미 지원이 모두 노쇼가 되고 도우미 봉사시간은 0이 된다.
+            센터 승인 없이 바로 바뀌고, 센터는 취소·노쇼 이력을 보고 사후에 판단한다.
+            응답은 노쇼로 바뀐 신청(도우미 이름·카톡 ID 포함)이고 내 신청 조회의 항목과 같은 모양이다.""")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "신고 완료 (status: NO_SHOW)")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "로그인 필요")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "도우미 계정이거나 비밀번호 변경 필요")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "HELP_REQUEST_NOT_FOUND — 없는 신청이거나 내 신청이 아님")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "HELP_REQUEST_INVALID_STATUS — 이용 완료가 아님(이미 노쇼 등), HELP_REQUEST_NO_SHOW_PERIOD_EXPIRED — 24시간 지남")
+    ResponseEntity<ApiResult<MyHelpRequestResponseDto>> reportNoShow(@Parameter(hidden = true) AuthPrincipal principal,
+                                                                    @Parameter(description = "신청 ID") Long helpRequestId);
 }
