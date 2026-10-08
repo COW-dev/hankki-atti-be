@@ -247,4 +247,70 @@ class DomainRepositoryTest {
         assertThat(result).extracting(Application::getId).containsExactlyInAnyOrder(matched.getId(), completed.getId());
         assertThat(result).allSatisfy(application -> assertThat(Hibernate.isInitialized(application.getHelper())).isTrue());
     }
+
+    @Test
+    void findOpen_모집중과매칭완료만_시작지난건과기간밖은빼고시작시각순() {
+        // given
+        Student student = saveStudent();
+        LocalDateTime now = LocalDateTime.of(2026, 10, 12, 12, 0);
+        LocalDateTime from = LocalDateTime.of(2026, 10, 12, 0, 0);
+        LocalDateTime toExclusive = LocalDateTime.of(2026, 10, 14, 0, 0);
+
+        HelpRequest later = helpRequestRepository.save(
+                new HelpRequest(student, now.plusDays(1).plusHours(5), Set.of(HelpType.SERVING), null, null));
+        HelpRequest matched = new HelpRequest(student, now.plusDays(1), Set.of(HelpType.SERVING), null, null);
+        matched.match(now);
+        helpRequestRepository.save(matched);
+        HelpRequest soon = helpRequestRepository.save(
+                new HelpRequest(student, now.plusMinutes(30), Set.of(HelpType.SERVING), null, null));
+        // 시작 시각 = 지금은 "시작 지난 건"이다
+        helpRequestRepository.save(new HelpRequest(student, now, Set.of(HelpType.SERVING), null, null));
+        HelpRequest canceled = new HelpRequest(student, now.plusHours(5), Set.of(HelpType.SERVING), null, null);
+        canceled.withdraw(now);
+        helpRequestRepository.save(canceled);
+        helpRequestRepository.save(new HelpRequest(student, toExclusive, Set.of(HelpType.SERVING), null, null));
+        flushAndClear();
+
+        // when
+        List<HelpRequest> result = helpRequestRepository.findOpen(from, toExclusive, now);
+
+        // then
+        assertThat(result).extracting(HelpRequest::getId)
+                .containsExactly(soon.getId(), matched.getId(), later.getId());
+    }
+
+    @Test
+    void findActiveWithHelpRequestByHelperId_진행중지원만_신청까지한번에() {
+        // given
+        Student student = saveStudent();
+        Helper helper = saveHelper();
+        LocalDateTime noon = LocalDateTime.of(2026, 10, 12, 12, 0);
+        HelpRequest request = helpRequestRepository.save(
+                new HelpRequest(student, noon, Set.of(HelpType.SERVING), null, null));
+        Application matched = new Application(request, helper, NOW);
+        matched.match(NOW);
+        Application pending = new Application(request, helper, NOW);
+        pending.promote(NOW, true);
+        Application waiting = new Application(request, helper, NOW);
+        Application withdrawn = new Application(request, helper, NOW);
+        withdrawn.withdraw(NOW);
+        Application completed = new Application(request, helper, NOW);
+        completed.match(NOW);
+        completed.complete();
+        applicationRepository.save(matched);
+        applicationRepository.save(pending);
+        applicationRepository.save(waiting);
+        applicationRepository.save(withdrawn);
+        applicationRepository.save(completed);
+        flushAndClear();
+
+        // when
+        List<Application> result = applicationRepository.findActiveWithHelpRequestByHelperId(helper.getAccountId());
+
+        // then
+        assertThat(result).extracting(Application::getId)
+                .containsExactlyInAnyOrder(matched.getId(), pending.getId(), waiting.getId());
+        assertThat(result).allSatisfy(
+                application -> assertThat(Hibernate.isInitialized(application.getHelpRequest())).isTrue());
+    }
 }

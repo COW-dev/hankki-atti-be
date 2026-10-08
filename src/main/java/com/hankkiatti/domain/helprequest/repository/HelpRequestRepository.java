@@ -44,6 +44,25 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequest, Long> 
                                         @Param("statuses") List<HelpRequestStatus> statuses);
 
     /**
+     * 도우미가 지원할 수 있는 신청: 모집 중·매칭 완료이고 아직 시작 전이며 시작 시각이 [from, toExclusive)인 것. 시작 시각 순.
+     * 시작이 지난 모집 중 신청은 스케줄러가 곧 매칭 실패로 바꾸므로 넣지 않는다.
+     */
+    default List<HelpRequest> findOpen(LocalDateTime from, LocalDateTime toExclusive, LocalDateTime now) {
+        return findOpenWithStatus(from, toExclusive, now, HelpRequestStatus.IN_PROGRESS);
+    }
+
+    @Query("""
+            select r from HelpRequest r
+            where r.status in :statuses
+              and r.startAt > :now
+              and r.startAt >= :from and r.startAt < :toExclusive
+            order by r.startAt, r.id""")
+    List<HelpRequest> findOpenWithStatus(@Param("from") LocalDateTime from,
+                                         @Param("toExclusive") LocalDateTime toExclusive,
+                                         @Param("now") LocalDateTime now,
+                                         @Param("statuses") List<HelpRequestStatus> statuses);
+
+    /**
      * 식사가 시작됐는데 아직 처리할 게 남은 신청: 모집 중이거나 예비 지원이 남아 있는 신청.
      */
     default List<Long> findIdsToStart(LocalDateTime now, int limit) {
