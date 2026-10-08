@@ -30,6 +30,20 @@ public interface ApplicationRepository extends JpaRepository<Application, Long> 
             @Param("statuses") Collection<ApplicationStatus> statuses);
 
     /**
+     * 도우미의 진행 중인 지원(매칭 완료·승격 응답 대기·예비)을 신청과 함께 가져온다.
+     * 요청 목록에서 이미 지원한 신청과 확정 매칭과 겹치는 신청을 가려낼 때 쓴다.
+     */
+    default List<Application> findActiveWithHelpRequestByHelperId(Long helperId) {
+        return findWithHelpRequestByHelperIdAndStatusIn(helperId, ApplicationStatus.ACTIVE);
+    }
+
+    @Query("""
+            select a from Application a join fetch a.helpRequest
+            where a.helper.accountId = :helperId and a.status in :statuses""")
+    List<Application> findWithHelpRequestByHelperIdAndStatusIn(@Param("helperId") Long helperId,
+                                                               @Param("statuses") Collection<ApplicationStatus> statuses);
+
+    /**
      * 도우미의 봉사시간 합계. 봉사시간이 기록된 지원(이용 완료 1.0, 노쇼 0)만 더한다. 하나도 없으면 null.
      */
     @Query("select sum(a.volunteerHours) from Application a where a.helper.accountId = :helperId")

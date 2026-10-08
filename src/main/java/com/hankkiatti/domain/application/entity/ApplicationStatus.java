@@ -1,6 +1,7 @@
 package com.hankkiatti.domain.application.entity;
 
 import com.hankkiatti.domain.common.LabeledEnum;
+import java.util.List;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
@@ -20,5 +21,20 @@ public enum ApplicationStatus implements LabeledEnum {
     COMPLETED("이용 완료"),
     NO_SHOW("노쇼");
 
+    // 진행 중인 지원: 아직 결과가 나지 않은 것. 같은 신청에 다시 지원할 수 없는 기준(재지원 규칙)
+    public static final List<ApplicationStatus> ACTIVE = List.of(MATCHED, PROMOTION_PENDING, WAITING);
+
+    // 확정 매칭: 도우미의 시간이 묶인 것. 겹치는 다른 신청에 지원할 수 없는 기준.
+    // 승격 응답 대기도 넣는다 — 수락하면 두 건이 겹치기 때문 (요구사항 "논의 필요" 기본값)
+    public static final List<ApplicationStatus> CONFIRMED = List.of(MATCHED, PROMOTION_PENDING);
+
     private final String label;
+
+    public boolean isActive() {
+        return ACTIVE.contains(this);
+    }
+
+    public boolean isConfirmed() {
+        return CONFIRMED.contains(this);
+    }
 }

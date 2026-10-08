@@ -4,16 +4,18 @@ import com.hankkiatti.domain.helprequest.dto.request.HelpRequestCreateRequestDto
 import com.hankkiatti.domain.helprequest.dto.response.HelpRequestCreateResponseDto;
 import com.hankkiatti.domain.helprequest.dto.response.MyHelpRequestResponseDto;
 import com.hankkiatti.domain.helprequest.dto.response.MyHelpRequestsResponseDto;
+import com.hankkiatti.domain.helprequest.dto.response.OpenHelpRequestDateResponseDto;
 import com.hankkiatti.domain.helprequest.dto.response.TimeOptionDateResponseDto;
 import com.hankkiatti.global.response.ApiResult;
 import com.hankkiatti.global.security.AuthPrincipal;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import java.time.LocalDate;
 import java.util.List;
 import org.springframework.http.ResponseEntity;
 
-@Tag(name = "도우미 신청", description = "장애학생이 식사 도우미를 신청하는 API")
+@Tag(name = "도우미 신청", description = "장애학생이 식사 도우미를 신청하고, 도우미가 지원할 신청을 보는 API")
 public interface HelpRequestControllerDocs {
 
     @Operation(summary = "시작 시각 선택지 조회", description = """
@@ -48,6 +50,23 @@ public interface HelpRequestControllerDocs {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "로그인 필요")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "도우미 계정이거나 비밀번호 변경 필요")
     ResponseEntity<ApiResult<MyHelpRequestsResponseDto>> getMyRequests(@Parameter(hidden = true) AuthPrincipal principal);
+
+    @Operation(summary = "요청 목록 조회 (도우미)", description = """
+            도우미 요청 목록(F-06). 지원할 수 있는 신청(모집 중·매칭 완료, 아직 시작 전)을 날짜별로 묶어 시작 시각 순으로 준다.
+            from·to는 ISO 날짜(2026-10-12)이고 to를 포함한다. from이 없으면 오늘, to가 없으면 from + 7일. from > to이거나 31일을 넘으면 422.
+            블라인드 — 신청 ID·시각·도움 유형만 있다. 장애학생 정보, 기타 도움 내용, 메모, 예비 인원은 주지 않는다.
+            카드마다 지금 지원하면 어떻게 되는지(applyOutcome)를 준다: 모집 중이면 MATCH(바로 매칭), 매칭 완료면 WAITING(예비 등록).
+            BLOCKED(지원 불가)와 이유 blockReason: ALREADY_APPLIED — 이 신청에 내 진행 중 지원(매칭·승격 응답 대기·예비)이 있음,
+            TIME_OVERLAP — 내 확정 매칭(매칭 완료·승격 응답 대기)과 이용 시간이 겹침. 내 예비와 겹치는 건 막지 않는다.""")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공 (빈 날짜는 없다)")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "COMMON_INVALID_REQUEST — 날짜 형식이 틀림")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "로그인 필요")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "장애학생 계정이거나 비밀번호 변경 필요")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "422", description = "HELP_REQUEST_INVALID_DATE_RANGE — from > to 이거나 31일 초과")
+    ResponseEntity<ApiResult<List<OpenHelpRequestDateResponseDto>>> getOpenRequests(
+            @Parameter(hidden = true) AuthPrincipal principal,
+            @Parameter(description = "조회 시작 날짜 (기본 오늘)", example = "2026-10-12") LocalDate from,
+            @Parameter(description = "조회 끝 날짜, 포함 (기본 from + 7일)", example = "2026-10-18") LocalDate to);
 
     @Operation(summary = "신청 철회", description = """
             모집 중인 내 신청을 바로 철회한다 (확인 단계 없음). 철회된 신청은 취소 완료가 되어 내 신청의 지난 신청으로 간다.

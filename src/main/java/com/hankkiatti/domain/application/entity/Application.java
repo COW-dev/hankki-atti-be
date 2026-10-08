@@ -178,9 +178,7 @@ public class Application extends BaseTimeEntity {
     }
 
     public boolean isActive() {
-        return status == ApplicationStatus.MATCHED
-                || status == ApplicationStatus.PROMOTION_PENDING
-                || status == ApplicationStatus.WAITING;
+        return status.isActive();
     }
 
     private void requireStatus(ApplicationStatus... allowed) {
