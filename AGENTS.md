@@ -107,7 +107,7 @@ domain/
 ├── student/      Student, DisabilityType, CredentialMailStatus
 ├── helper/       Helper, 도우미 회원가입(HelperSignupService, 공개 경로 `/api/helpers/signup`)
 ├── admin/        Admin, AdminGrade
-├── helprequest/  HelpRequest, HelpType, HelpRequestStatus, RequestCancelType, 식사 시작·종료 자동 처리(MealTimeJob)
+├── helprequest/  HelpRequest, HelpType, HelpRequestStatus, RequestCancelType, Meal, 신청 가능 날짜·시각(HelpRequestSchedule), 식사 시작·종료 자동 처리(MealTimeJob)
 └── application/  Application, ApplicationStatus, CancelReason, ApplicationAfterAction
 ```
 - `Student`·`Helper`·`Admin`은 `Account`와 PK를 공유하는 1:1 프로필이다 (`@MapsId`)
@@ -328,6 +328,7 @@ public class HelpRequest extends BaseTimeEntity {
 - **즉시 취소, 관리자 승인 없음** — 매칭된 도우미가 취소하면 예비 1번 자동 승격, 예비가 없으면 모집 재개. 취소 사유·시점은 이력으로 남긴다
 - **관리자는 매칭에 관여하지 않음** — 배정·재배정·취소 승인 API를 만들지 않는다
 - **시간 기반 자동 처리** — 식사 시작 시각에 미매칭 건은 매칭 실패, 식사 종료(시작 + 1시간)에 이용 완료, 이후 24시간 동안 노쇼 신고 가능. 신청 시각은 30분 단위
+- **신청 가능 날짜·시각** — 오늘부터 7일 뒤까지, 주말·공휴일 제외, 오늘은 시작 전인 시각만. 시작 시각(점심 11:30~13:00·저녁 17:00~17:30)과 공휴일 목록은 `HelpRequestSchedule`·`Meal` 한 곳에 둔다. 공휴일 목록은 매년(월력요항 발표·임시공휴일 지정 때) 갱신한다
 - **시간 겹침** — 이용 시간이 1시간이므로 같은 슬롯이 아니라 **구간이 겹치는지**로 판단한다
 
 ---
