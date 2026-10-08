@@ -220,6 +220,8 @@ public enum HelpRequestErrorType implements ErrorCode {
 - `ErrorCode.getCode()`가 "{타입 이름}_{상수 이름}"으로 자동으로 만든다: `AuthErrorType.PASSWORD_CHANGE_REQUIRED` → `AUTH_PASSWORD_CHANGE_REQUIRED`, `CommonErrorType.NOT_FOUND` → `COMMON_NOT_FOUND`
 - 따로 코드를 적지 않는다. 대신 `XxxErrorType` 클래스·상수 이름을 바꾸면 API 변경이므로 PR 본문 "타 직군 전달 사항"에 적는다
 
+**성공 응답의 `data`** — 상태를 바꾸는 API(POST·PATCH)도 바뀐 리소스를 `data`로 돌려준다 (예: 신청 철회 → 철회된 신청). 화면이 다시 조회하지 않고 바로 반영할 수 있게 하려는 것이다. 돌려줄 리소스가 없거나(로그아웃) 무엇을 돌려줘도 정보가 드러나는 경우(비밀번호 재설정 요청)만 데이터 없이 응답한다
+
 ```java
 // 컨트롤러 반환 패턴
 return ApiResponse.of(SuccessType.SUCCESS, service.getRequest(id));   // 데이터 있음

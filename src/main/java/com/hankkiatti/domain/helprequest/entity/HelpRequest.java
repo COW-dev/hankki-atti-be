@@ -134,7 +134,15 @@ public class HelpRequest extends BaseTimeEntity {
 
     public void withdraw(LocalDateTime now) {
         requireStatus(HelpRequestStatus.RECRUITING);
+        // 식사가 시작된 모집 중 신청은 스케줄러가 곧 매칭 실패로 바꾼다. 그 사이 철회되면 매칭 실패가 취소로 잡힌다
+        if (!now.isBefore(startAt)) {
+            throw new HelpRequestException(HelpRequestErrorType.INVALID_STATUS, "식사 시작 후 철회, helpRequestId=" + id);
+        }
         cancel(RequestCancelType.STUDENT_WITHDRAW, now);
+    }
+
+    public boolean isRequestedBy(Long studentId) {
+        return student.getAccountId().equals(studentId);
     }
 
     public void cancelByStudent(LocalDateTime now) {

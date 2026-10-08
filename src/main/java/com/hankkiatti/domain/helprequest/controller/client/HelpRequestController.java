@@ -2,6 +2,7 @@ package com.hankkiatti.domain.helprequest.controller.client;
 
 import com.hankkiatti.domain.helprequest.dto.request.HelpRequestCreateRequestDto;
 import com.hankkiatti.domain.helprequest.dto.response.HelpRequestCreateResponseDto;
+import com.hankkiatti.domain.helprequest.dto.response.MyHelpRequestResponseDto;
 import com.hankkiatti.domain.helprequest.dto.response.MyHelpRequestsResponseDto;
 import com.hankkiatti.domain.helprequest.dto.response.TimeOptionDateResponseDto;
 import com.hankkiatti.domain.helprequest.service.HelpRequestService;
@@ -16,6 +17,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -48,5 +50,13 @@ public class HelpRequestController implements HelpRequestControllerDocs {
             @AuthenticationPrincipal AuthPrincipal principal,
             @Valid @RequestBody HelpRequestCreateRequestDto request) {
         return ApiResponse.of(SuccessType.CREATED, helpRequestService.create(principal.accountId(), request));
+    }
+
+    @Override
+    @PostMapping("/{helpRequestId}/withdraw")
+    public ResponseEntity<ApiResult<MyHelpRequestResponseDto>> withdraw(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @PathVariable Long helpRequestId) {
+        return ApiResponse.of(SuccessType.SUCCESS, helpRequestService.withdraw(principal.accountId(), helpRequestId));
     }
 }
