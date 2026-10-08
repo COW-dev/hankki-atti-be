@@ -49,6 +49,18 @@ mail:
     retry-delays: 1m,1m,1m
     claim-timeout: 5m
 
+# 문자 발송 — 값 설명은 domain/sms/service/SmsProperties 참고
+sms:
+  sns:
+    # true면 AWS SNS로 보낸다. 자격 증명은 환경 변수 AWS_ACCESS_KEY_ID·AWS_SECRET_ACCESS_KEY (저장소에 넣지 않는다)
+    enabled: ${SMS_SNS_ENABLED:false}
+    region: ${SMS_SNS_REGION:ap-northeast-2}
+  outbox:
+    poll-interval: PT10S
+    batch-size: 20
+    retry-delays: 1m,1m,1m
+    claim-timeout: 5m
+
 management:
   health:
     mail:

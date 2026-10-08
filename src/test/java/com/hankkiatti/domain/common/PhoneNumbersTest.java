@@ -18,4 +18,15 @@ class PhoneNumbersTest {
         // when & then
         assertThat(PhoneNumbers.normalize(raw)).isEqualTo(expected);
     }
+
+    @ParameterizedTest
+    @CsvSource({
+            "010-1234-5678, +821012345678",
+            "01012345678, +821012345678",
+            "011-123-4567, +82111234567"
+    })
+    void toE164_앞의0을빼고국가번호를붙임(String raw, String expected) {
+        // when & then
+        assertThat(PhoneNumbers.toE164(raw)).isEqualTo(expected);
+    }
 }

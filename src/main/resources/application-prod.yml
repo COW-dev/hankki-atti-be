@@ -27,6 +27,8 @@ auth:
 
 # 메일 본문 링크 주소: MAIL_LINK_BASE_URL=<사용자 앱 주소> (예: https://app.bluerack.org). 없으면 http://localhost:3000.
 #   서브도메인이 정해지면 기본값을 여기에 적는다
+# 문자: SMS_SNS_ENABLED=true, SMS_SNS_REGION=ap-northeast-2(기본), AWS_ACCESS_KEY_ID·AWS_SECRET_ACCESS_KEY(sns:Publish만 허용한 IAM 키).
+#   꺼져 있으면 문자는 발송 대기로 남는다 (설정하면 그때 발송)
 # 메일: spring.mail.host가 없으면 메일을 보내지 않고 발송 대기로 둔다 (설정하면 그때 발송).
 # Gmail SMTP — SPRING_MAIL_HOST=smtp.gmail.com, SPRING_MAIL_PORT=587,
 #              SPRING_MAIL_USERNAME=<서비스 전용 Gmail>, SPRING_MAIL_PASSWORD=<앱 비밀번호>

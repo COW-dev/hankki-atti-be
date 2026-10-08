@@ -34,4 +34,21 @@ public class AsyncConfig {
         executor.initialize();
         return executor;
     }
+
+    /**
+     * 문자 발송 전용 스레드 풀. 문자 수가 많지 않아 작게 둔다. 큐가 넘치면 버린다 — 아웃박스에 남아 있어 폴러가 다시 보낸다.
+     */
+    @Bean(name = "smsExecutor")
+    public Executor smsExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(1);
+        executor.setMaxPoolSize(2);
+        executor.setQueueCapacity(100);
+        executor.setThreadNamePrefix("sms-");
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.DiscardPolicy());
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(30);
+        executor.initialize();
+        return executor;
+    }
 }
