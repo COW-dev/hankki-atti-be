@@ -3,6 +3,7 @@ package com.hankkiatti.domain.helper.service;
 import com.hankkiatti.domain.account.entity.Account;
 import com.hankkiatti.domain.account.entity.AccountRole;
 import com.hankkiatti.domain.account.repository.AccountRepository;
+import com.hankkiatti.domain.common.PhoneNumbers;
 import com.hankkiatti.domain.helper.dto.request.HelperSignupRequestDto;
 import com.hankkiatti.domain.helper.dto.response.HelperSignupResponseDto;
 import com.hankkiatti.domain.helper.entity.Helper;
@@ -55,7 +56,7 @@ public class HelperSignupService {
                     request.name().trim(),
                     studentNo,
                     loginId,
-                    normalizePhone(request.phone()),
+                    PhoneNumbers.normalize(request.phone()),
                     request.kakaoId(),
                     Boolean.TRUE.equals(request.attiMember()),
                     LocalDateTime.now(clock)));
@@ -66,12 +67,5 @@ public class HelperSignupService {
         // 이메일·전화번호는 로그에 남기지 않는다
         log.info("도우미 가입: accountId={}", account.getId());
         return new HelperSignupResponseDto(account.getId(), loginId);
-    }
-
-    // 010-1234-5678 / 01012345678 → 010-1234-5678 (요청 형식은 DTO가 이미 확인했다)
-    private String normalizePhone(String raw) {
-        String digits = raw.replace("-", "").trim();
-        int middleEnd = digits.length() - 4;
-        return digits.substring(0, 3) + "-" + digits.substring(3, middleEnd) + "-" + digits.substring(middleEnd);
     }
 }
