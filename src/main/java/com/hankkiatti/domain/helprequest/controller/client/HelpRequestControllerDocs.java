@@ -1,8 +1,12 @@
 package com.hankkiatti.domain.helprequest.controller.client;
 
+import com.hankkiatti.domain.helprequest.dto.request.HelpRequestCreateRequestDto;
+import com.hankkiatti.domain.helprequest.dto.response.HelpRequestCreateResponseDto;
 import com.hankkiatti.domain.helprequest.dto.response.TimeOptionDateResponseDto;
 import com.hankkiatti.global.response.ApiResult;
+import com.hankkiatti.global.security.AuthPrincipal;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.List;
 import org.springframework.http.ResponseEntity;
@@ -19,4 +23,17 @@ public interface HelpRequestControllerDocs {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "로그인 필요")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "비밀번호 변경 필요")
     ResponseEntity<ApiResult<List<TimeOptionDateResponseDto>>> getTimeOptions();
+
+    @Operation(summary = "도우미 신청", description = """
+            장애학생이 날짜·시작 시각·필요한 도움을 골라 신청한다. 신청은 모집 중으로 시작한다.
+            startAt은 시작 시각 선택지(time-options)에 있는 시각이어야 한다 (지난 시각·주말·공휴일·7일 넘음이면 422).
+            내 모집 중·매칭 완료 신청과 이용 시간(1시간)이 겹치면 막는다 (409). 12:00과 12:30은 겹치고 12:00과 13:00은 겹치지 않는다.
+            기타(OTHER)를 고르면 otherHelpText가 필요하다.""")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "신청 완료 (모집 중)")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "로그인 필요")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "도우미 계정이거나 비밀번호 변경 필요")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "HELP_REQUEST_TIME_OVERLAP — 이미 신청한 시간과 겹침")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "422", description = "HELP_REQUEST_START_TIME_NOT_AVAILABLE — 고를 수 없는 시각, HELP_REQUEST_OTHER_HELP_TEXT_REQUIRED — 기타 내용 없음, COMMON_VALIDATION_FAILED — 도움 유형 없음·글자 수 초과")
+    ResponseEntity<ApiResult<HelpRequestCreateResponseDto>> create(@Parameter(hidden = true) AuthPrincipal principal,
+                                                                  HelpRequestCreateRequestDto request);
 }
