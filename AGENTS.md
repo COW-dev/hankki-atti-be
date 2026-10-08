@@ -104,6 +104,7 @@ domain/
 ├── account/      Account, AccountRole, AccountStatus
 ├── auth/         RefreshToken, PasswordResetToken, TokenAudience, 로그인·토큰·비밀번호 변경·재설정 API
 ├── mail/         MailOutbox, 메일 아웃박스 적재·발송(MailOutboxService, MailRelay)
+├── sms/          SmsOutbox, 문자 아웃박스 적재·발송(SmsOutboxService, SmsRelay), 발송부 SmsSender(AWS SNS 구현 SnsSmsSender)
 ├── student/      Student, DisabilityType, CredentialMailStatus
 ├── helper/       Helper, 도우미 회원가입(HelperSignupService, 공개 경로 `/api/helpers/signup`)
 ├── admin/        Admin, AdminGrade
@@ -313,6 +314,8 @@ public class HelpRequest extends BaseTimeEntity {
   - 업무 트랜잭션 안에서 부르면 업무가 롤백될 때 메일도 사라진다. 커밋되면 메일 전용 스레드가 바로 보내고, 놓친 메일은 폴러가 10초마다 보낸다
   - 실패하면 1분 간격으로 3번 재시도, 그래도 실패면 `MailFailedEvent` 발행. 발송 결과가 필요한 기능은 `MailSentEvent`·`MailFailedEvent`를 구독한다
   - 수신자·본문은 로그에 남기지 않는다 (아웃박스 id·종류만)
+- 문자는 `SmsOutboxService.enqueue(...)`로 아웃박스에 적는다. 메일과 같은 흐름(커밋 후 발송·재시도·`SmsFailedEvent`)이고, 발송부는 `SmsSender` 인터페이스라 발신 서비스를 바꿀 때 구현체만 교체한다. 문자가 주 알림 채널이지만 메일도 쓸 수 있으니 두 모듈을 합치거나 없애지 않는다
+  - 전화번호는 저장 형식(010-1234-5678)으로 넘기면 E.164(+821012345678)로 바꿔 보낸다. 본문은 `[한끼아띠]`로 시작, 45자 안팎, 링크 없음
 - 예약 작업은 `@Scheduled`로 만든다. 스케줄러 스레드는 4개(`spring.task.scheduling.pool.size`) — 한 작업이 오래 걸려도 다른 작업이 밀리지 않게 작업 안에서 오래 막히는 호출을 피한다
 - 비동기 작업은 용도별 스레드 풀을 따로 둔다 (`@Async("mailExecutor")`처럼 이름 지정). 이름 없는 `@Async`는 쓰지 않는다
 - 서버가 여러 대일 수 있으므로 예약 작업은 같은 대상을 두 서버가 동시에 처리해도 안전해야 한다 (조건부 UPDATE로 선점 등)
@@ -432,6 +435,7 @@ main에 병합되고 CI 검사(`test`, `secret-scan`, `agent-config`)가 모두 
 **push 전 스모크 테스트**: 단위 테스트는 H2로 돌기 때문에, `docker` job에서 MySQL 8.4를 띄우고 이미지를 `prod` 프로필로 실행해 `/actuator/health`가 UP인지 확인한다. 실패하면 push하지 않는다.
 
 **이미지 실행에 필요한 환경 변수**: `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, `SPRING_DATASOURCE_PASSWORD`. 기본 프로필은 `prod`, 시간대는 Asia/Seoul로 고정, 포트 8080.
+문자 발송(선택): `SMS_SNS_ENABLED=true`, `SMS_SNS_REGION`(기본 ap-northeast-2), `AWS_ACCESS_KEY_ID`·`AWS_SECRET_ACCESS_KEY`(`sns:Publish`만 허용한 IAM 키). 꺼져 있으면 문자는 발송 대기로 남는다.
 
 **롤백**: 서버에서 이전 버전 태그를 pull해 다시 띄운다 (`docker pull mjucow/hankki-atti-be:vX.Y.Z`).
 

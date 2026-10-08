@@ -13,4 +13,10 @@ public final class PhoneNumbers {
         int middleEnd = digits.length() - 4;
         return digits.substring(0, 3) + "-" + digits.substring(3, middleEnd) + "-" + digits.substring(middleEnd);
     }
+
+    // 010-1234-5678 / 01012345678 → +821012345678 (국제 표준 E.164). 문자 발송에 쓴다
+    public static String toE164(String raw) {
+        String digits = raw.replace("-", "").trim();
+        return "+82" + digits.substring(1);
+    }
 }
