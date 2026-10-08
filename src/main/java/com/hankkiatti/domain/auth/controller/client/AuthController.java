@@ -2,6 +2,9 @@ package com.hankkiatti.domain.auth.controller.client;
 
 import com.hankkiatti.domain.auth.dto.request.LoginRequestDto;
 import com.hankkiatti.domain.auth.dto.request.PasswordChangeRequestDto;
+import com.hankkiatti.domain.auth.dto.request.PasswordResetConfirmRequestDto;
+import com.hankkiatti.domain.auth.dto.request.PasswordResetRequestDto;
+import com.hankkiatti.domain.auth.dto.request.PasswordResetVerifyRequestDto;
 import com.hankkiatti.domain.auth.dto.response.LoginResponseDto;
 import com.hankkiatti.domain.auth.dto.response.TokenResponseDto;
 import com.hankkiatti.domain.auth.entity.TokenAudience;
@@ -9,6 +12,7 @@ import com.hankkiatti.domain.auth.exception.AuthErrorType;
 import com.hankkiatti.domain.auth.exception.AuthException;
 import com.hankkiatti.domain.auth.service.AuthResult;
 import com.hankkiatti.domain.auth.service.AuthService;
+import com.hankkiatti.domain.auth.service.PasswordResetService;
 import com.hankkiatti.global.response.ApiResponse;
 import com.hankkiatti.global.response.ApiResult;
 import com.hankkiatti.global.response.type.SuccessType;
@@ -35,6 +39,7 @@ public class AuthController implements AuthControllerDocs {
     private static final TokenAudience AUDIENCE = TokenAudience.USER;
 
     private final AuthService authService;
+    private final PasswordResetService passwordResetService;
     private final RefreshTokenCookies refreshTokenCookies;
 
     @Override
@@ -71,6 +76,29 @@ public class AuthController implements AuthControllerDocs {
         AuthResult<TokenResponseDto> result = authService.changePassword(principal.accountId(), request);
         return ApiResponse.of(SuccessType.SUCCESS, result.body(),
                 withCookie(refreshTokenCookies.create(AUDIENCE, result.refreshToken())));
+    }
+
+    @Override
+    @PostMapping("/password-reset/request")
+    public ResponseEntity<ApiResult<Void>> requestPasswordReset(@Valid @RequestBody PasswordResetRequestDto request) {
+        passwordResetService.request(request);
+        return ApiResponse.of(SuccessType.SUCCESS);
+    }
+
+    @Override
+    @PostMapping("/password-reset/verify")
+    public ResponseEntity<ApiResult<Void>> verifyPasswordReset(
+            @Valid @RequestBody PasswordResetVerifyRequestDto request) {
+        passwordResetService.verify(request);
+        return ApiResponse.of(SuccessType.SUCCESS);
+    }
+
+    @Override
+    @PostMapping("/password-reset/confirm")
+    public ResponseEntity<ApiResult<Void>> confirmPasswordReset(
+            @Valid @RequestBody PasswordResetConfirmRequestDto request) {
+        passwordResetService.confirm(request);
+        return ApiResponse.of(SuccessType.SUCCESS);
     }
 
     private HttpHeaders withCookie(ResponseCookie cookie) {

@@ -102,7 +102,7 @@ domain/{도메인}/
 domain/
 ├── common/       BaseTimeEntity, LabeledEnum, AbstractEnumConverter
 ├── account/      Account, AccountRole, AccountStatus
-├── auth/         RefreshToken, TokenAudience, 로그인·토큰·비밀번호 변경 API
+├── auth/         RefreshToken, PasswordResetToken, TokenAudience, 로그인·토큰·비밀번호 변경·재설정 API
 ├── mail/         MailOutbox, 메일 아웃박스 적재·발송(MailOutboxService, MailRelay)
 ├── student/      Student, DisabilityType, CredentialMailStatus
 ├── helper/       Helper, 도우미 회원가입(HelperSignupService, 공개 경로 `/api/helpers/signup`)

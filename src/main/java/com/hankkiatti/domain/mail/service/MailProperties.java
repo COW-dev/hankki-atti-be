@@ -12,6 +12,8 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 public record MailProperties(
         @DefaultValue("no-reply@hankki-atti.local") String fromAddress,
         @DefaultValue("한끼아띠 (명지대학교 장애학생지원센터)") String fromName,
+        // 메일 본문 링크의 기준 주소 (사용자 앱 주소, 끝에 / 없이)
+        @DefaultValue("http://localhost:3000") String linkBaseUrl,
         @DefaultValue Outbox outbox
 ) {
 

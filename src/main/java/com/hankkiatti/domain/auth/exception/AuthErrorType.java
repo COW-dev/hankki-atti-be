@@ -15,7 +15,9 @@ public enum AuthErrorType implements ErrorCode {
     ACCESS_DENIED(403, "접근 권한이 없습니다."),
     PASSWORD_CHANGE_REQUIRED(403, "비밀번호를 먼저 변경해 주세요."),
     CURRENT_PASSWORD_MISMATCH(400, "현재 비밀번호가 올바르지 않습니다."),
-    SAME_AS_CURRENT_PASSWORD(422, "현재 비밀번호와 다른 비밀번호를 입력해 주세요.");
+    SAME_AS_CURRENT_PASSWORD(422, "현재 비밀번호와 다른 비밀번호를 입력해 주세요."),
+    // 만료·사용됨·새 요청으로 무효·없는 토큰을 구분하지 않는다
+    PASSWORD_RESET_LINK_INVALID(410, "링크가 만료됐거나 이미 사용됐어요. 비밀번호 재설정을 다시 요청해 주세요.");
 
     private final int httpStatusCode;
     private final String message;
