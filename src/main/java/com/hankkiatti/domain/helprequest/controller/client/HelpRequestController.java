@@ -59,4 +59,12 @@ public class HelpRequestController implements HelpRequestControllerDocs {
             @PathVariable Long helpRequestId) {
         return ApiResponse.of(SuccessType.SUCCESS, helpRequestService.withdraw(principal.accountId(), helpRequestId));
     }
+
+    @Override
+    @PostMapping("/{helpRequestId}/no-show")
+    public ResponseEntity<ApiResult<MyHelpRequestResponseDto>> reportNoShow(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @PathVariable Long helpRequestId) {
+        return ApiResponse.of(SuccessType.SUCCESS, helpRequestService.reportNoShow(principal.accountId(), helpRequestId));
+    }
 }

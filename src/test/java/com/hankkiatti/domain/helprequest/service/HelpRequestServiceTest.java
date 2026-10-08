@@ -10,6 +10,7 @@ import static org.mockito.Mockito.verify;
 
 import com.hankkiatti.domain.account.entity.AccountRole;
 import com.hankkiatti.domain.application.entity.Application;
+import com.hankkiatti.domain.application.entity.ApplicationStatus;
 import com.hankkiatti.domain.application.repository.ApplicationRepository;
 import com.hankkiatti.domain.auth.exception.AuthErrorType;
 import com.hankkiatti.domain.auth.exception.AuthException;
@@ -333,5 +334,82 @@ class HelpRequestServiceTest {
                 .isInstanceOf(AuthException.class)
                 .extracting("errorCode").isEqualTo(AuthErrorType.ACCESS_DENIED);
         verify(helpRequestRepository, never()).findByIdForUpdate(anyLong());
+    }
+
+    // ---- 노쇼 신고 (지금 = 2026-10-12(월) 09:00) ----
+
+    private HelpRequest myCompletedRequest(LocalDateTime completedAt) {
+        HelpRequest request = myRecruitingRequest(1L, completedAt.minusHours(1));
+        request.match(completedAt.minusDays(1));
+        request.complete(completedAt);
+        return request;
+    }
+
+    private Application completedApplication(HelpRequest request) {
+        Helper helper = TestProfiles.helper(TestAccounts.withId(9L, AccountRole.HELPER, "hash", false), "60230001");
+        Application application = matchedApplication(20L, request, helper);
+        application.complete();
+        return application;
+    }
+
+    @Test
+    void reportNoShow_24시간이내_신청과지원모두노쇼이고봉사시간0() {
+        // given — 어제 13:00 이용 완료, 마감 오늘 13:00
+        HelpRequest request = myCompletedRequest(MONDAY.minusDays(1).atTime(13, 0));
+        Application application = completedApplication(request);
+        given(studentRepository.existsById(STUDENT_ID)).willReturn(true);
+        given(helpRequestRepository.findByIdForUpdate(1L)).willReturn(Optional.of(request));
+        given(applicationRepository.findByHelpRequestIdAndStatus(1L, ApplicationStatus.COMPLETED))
+                .willReturn(List.of(application));
+
+        // when
+        MyHelpRequestResponseDto result = helpRequestService.reportNoShow(STUDENT_ID, 1L);
+
+        // then
+        assertThat(request.getStatus()).isEqualTo(HelpRequestStatus.NO_SHOW);
+        assertThat(request.getNoShowReportedAt()).isEqualTo(MONDAY.atTime(9, 0));
+        assertThat(application.getStatus()).isEqualTo(ApplicationStatus.NO_SHOW);
+        assertThat(application.getVolunteerHours()).isEqualByComparingTo("0");
+        assertThat(result.status()).isEqualTo(HelpRequestStatus.NO_SHOW);
+        assertThat(result.helper().name()).isEqualTo("이도움");
+        assertThat(result.noShowReportable()).isFalse();
+    }
+
+    @Test
+    void reportNoShow_24시간지남_NO_SHOW_PERIOD_EXPIRED이고지원은그대로() {
+        // given — 그제 13:00 이용 완료, 마감 어제 13:00
+        HelpRequest request = myCompletedRequest(MONDAY.minusDays(2).atTime(13, 0));
+        given(studentRepository.existsById(STUDENT_ID)).willReturn(true);
+        given(helpRequestRepository.findByIdForUpdate(1L)).willReturn(Optional.of(request));
+
+        // when & then
+        assertErrorType(() -> helpRequestService.reportNoShow(STUDENT_ID, 1L),
+                HelpRequestErrorType.NO_SHOW_PERIOD_EXPIRED);
+        assertThat(request.getStatus()).isEqualTo(HelpRequestStatus.COMPLETED);
+        verify(applicationRepository, never()).findByHelpRequestIdAndStatus(anyLong(), any());
+    }
+
+    @Test
+    void reportNoShow_이용완료가아님_INVALID_STATUS() {
+        // given
+        HelpRequest request = myRecruitingRequest(1L, NOON);
+        request.match(MONDAY.atTime(8, 0));
+        given(studentRepository.existsById(STUDENT_ID)).willReturn(true);
+        given(helpRequestRepository.findByIdForUpdate(1L)).willReturn(Optional.of(request));
+
+        // when & then
+        assertErrorType(() -> helpRequestService.reportNoShow(STUDENT_ID, 1L), HelpRequestErrorType.INVALID_STATUS);
+    }
+
+    @Test
+    void reportNoShow_남의신청_NOT_FOUND() {
+        // given
+        HelpRequest othersRequest = myCompletedRequest(MONDAY.minusDays(1).atTime(13, 0));
+        given(studentRepository.existsById(3L)).willReturn(true);
+        given(helpRequestRepository.findByIdForUpdate(1L)).willReturn(Optional.of(othersRequest));
+
+        // when & then
+        assertErrorType(() -> helpRequestService.reportNoShow(3L, 1L), HelpRequestErrorType.NOT_FOUND);
+        assertThat(othersRequest.getStatus()).isEqualTo(HelpRequestStatus.COMPLETED);
     }
 }
