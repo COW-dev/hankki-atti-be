@@ -20,7 +20,9 @@ import com.hankkiatti.domain.student.repository.StudentRepository;
 import com.hankkiatti.global.config.JpaConfig;
 import jakarta.persistence.EntityManager;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Set;
+import org.hibernate.Hibernate;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
@@ -214,5 +216,35 @@ class DomainRepositoryTest {
                 .isFalse();
         assertThat(helpRequestRepository.existsOverlapping(student.getAccountId(), evening, evening.plusHours(1)))
                 .isTrue();
+    }
+
+    @Test
+    void findMatchedWithHelper_매칭완료와이용완료만_도우미까지한번에() {
+        // given
+        Student student = saveStudent();
+        Helper helper = saveHelper();
+        LocalDateTime noon = LocalDateTime.of(2026, 10, 12, 12, 0);
+        HelpRequest matchedRequest = helpRequestRepository.save(
+                new HelpRequest(student, noon, Set.of(HelpType.SERVING), null, null));
+        HelpRequest completedRequest = helpRequestRepository.save(
+                new HelpRequest(student, noon.plusDays(1), Set.of(HelpType.SERVING), null, null));
+        Application matched = new Application(matchedRequest, helper, NOW);
+        matched.match(NOW);
+        Application completed = new Application(completedRequest, helper, NOW);
+        completed.match(NOW);
+        completed.complete();
+        Application waiting = new Application(matchedRequest, helper, NOW.plusMinutes(1));
+        applicationRepository.save(matched);
+        applicationRepository.save(completed);
+        applicationRepository.save(waiting);
+        flushAndClear();
+
+        // when
+        List<Application> result = applicationRepository.findMatchedWithHelper(
+                List.of(matchedRequest.getId(), completedRequest.getId()));
+
+        // then
+        assertThat(result).extracting(Application::getId).containsExactlyInAnyOrder(matched.getId(), completed.getId());
+        assertThat(result).allSatisfy(application -> assertThat(Hibernate.isInitialized(application.getHelper())).isTrue());
     }
 }

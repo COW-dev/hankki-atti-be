@@ -2,6 +2,7 @@ package com.hankkiatti.domain.helprequest.controller.client;
 
 import com.hankkiatti.domain.helprequest.dto.request.HelpRequestCreateRequestDto;
 import com.hankkiatti.domain.helprequest.dto.response.HelpRequestCreateResponseDto;
+import com.hankkiatti.domain.helprequest.dto.response.MyHelpRequestsResponseDto;
 import com.hankkiatti.domain.helprequest.dto.response.TimeOptionDateResponseDto;
 import com.hankkiatti.domain.helprequest.service.HelpRequestService;
 import com.hankkiatti.domain.helprequest.service.TimeOptionService;
@@ -32,6 +33,13 @@ public class HelpRequestController implements HelpRequestControllerDocs {
     @GetMapping("/time-options")
     public ResponseEntity<ApiResult<List<TimeOptionDateResponseDto>>> getTimeOptions() {
         return ApiResponse.of(SuccessType.SUCCESS, timeOptionService.getTimeOptions());
+    }
+
+    @Override
+    @GetMapping("/me")
+    public ResponseEntity<ApiResult<MyHelpRequestsResponseDto>> getMyRequests(
+            @AuthenticationPrincipal AuthPrincipal principal) {
+        return ApiResponse.of(SuccessType.SUCCESS, helpRequestService.getMyRequests(principal.accountId()));
     }
 
     @Override

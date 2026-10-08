@@ -312,4 +312,29 @@ class HelpRequestTest {
         assertThat(request.overlaps(START.plusHours(1), START.plusHours(2))).isFalse();
         assertThat(request.overlaps(START.minusHours(1), START)).isFalse();
     }
+
+    @Test
+    void canReportNoShow_이용완료후24시간정각까지만_가능하고마감시각을줌() {
+        // given
+        LocalDateTime completedAt = START.plusHours(1);
+        HelpRequest request = completedRequest(completedAt);
+
+        // when & then
+        assertThat(request.noShowReportDeadline()).isEqualTo(completedAt.plusHours(24));
+        assertThat(request.canReportNoShow(completedAt.plusHours(24))).isTrue();
+        assertThat(request.canReportNoShow(completedAt.plusHours(24).plusSeconds(1))).isFalse();
+    }
+
+    @Test
+    void canReportNoShow_이용완료가아니면_불가하고마감시각없음() {
+        // given
+        HelpRequest matched = matchedRequest();
+        HelpRequest noShow = completedRequest(START.plusHours(1));
+        noShow.reportNoShow(START.plusHours(2));
+
+        // when & then
+        assertThat(matched.canReportNoShow(NOW)).isFalse();
+        assertThat(matched.noShowReportDeadline()).isNull();
+        assertThat(noShow.canReportNoShow(START.plusHours(3))).isFalse();
+    }
 }

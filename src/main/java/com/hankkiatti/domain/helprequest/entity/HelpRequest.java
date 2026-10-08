@@ -155,11 +155,20 @@ public class HelpRequest extends BaseTimeEntity {
 
     public void reportNoShow(LocalDateTime now) {
         requireStatus(HelpRequestStatus.COMPLETED);
-        if (now.isAfter(completedAt.plusHours(NO_SHOW_REPORT_HOURS))) {
+        if (now.isAfter(noShowReportDeadline())) {
             throw new HelpRequestException(HelpRequestErrorType.NO_SHOW_PERIOD_EXPIRED, "helpRequestId=" + id);
         }
         this.status = HelpRequestStatus.NO_SHOW;
         this.noShowReportedAt = now;
+    }
+
+    // 노쇼 신고 마감 = 이용 완료 + 24시간 (정각까지 신고 가능). 이용 완료 전이면 없다
+    public LocalDateTime noShowReportDeadline() {
+        return completedAt == null ? null : completedAt.plusHours(NO_SHOW_REPORT_HOURS);
+    }
+
+    public boolean canReportNoShow(LocalDateTime now) {
+        return status == HelpRequestStatus.COMPLETED && !now.isAfter(noShowReportDeadline());
     }
 
     public void markFeedbackPrompted(LocalDateTime now) {

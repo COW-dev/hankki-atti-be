@@ -2,6 +2,7 @@ package com.hankkiatti.domain.helprequest.controller.client;
 
 import com.hankkiatti.domain.helprequest.dto.request.HelpRequestCreateRequestDto;
 import com.hankkiatti.domain.helprequest.dto.response.HelpRequestCreateResponseDto;
+import com.hankkiatti.domain.helprequest.dto.response.MyHelpRequestsResponseDto;
 import com.hankkiatti.domain.helprequest.dto.response.TimeOptionDateResponseDto;
 import com.hankkiatti.global.response.ApiResult;
 import com.hankkiatti.global.security.AuthPrincipal;
@@ -36,4 +37,14 @@ public interface HelpRequestControllerDocs {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "422", description = "HELP_REQUEST_START_TIME_NOT_AVAILABLE — 고를 수 없는 시각, HELP_REQUEST_OTHER_HELP_TEXT_REQUIRED — 기타 내용 없음, COMMON_VALIDATION_FAILED — 도움 유형 없음·글자 수 초과")
     ResponseEntity<ApiResult<HelpRequestCreateResponseDto>> create(@Parameter(hidden = true) AuthPrincipal principal,
                                                                   HelpRequestCreateRequestDto request);
+
+    @Operation(summary = "내 신청 조회", description = """
+            장애학생 홈(F-02)의 다가오는 신청과 지난 신청을 준다.
+            다가오는 신청은 모집 중·매칭 완료로 시작 시각이 가까운 순, 지난 신청은 매칭 실패·취소 완료·이용 완료·노쇼로 최근 순이다.
+            매칭 완료·이용 완료·노쇼 신청에는 도우미 이름·카톡 ID가 들어간다 (전화번호는 없다). 예비 명단은 주지 않는다.
+            이용 완료 후 24시간까지는 noShowReportable이 true이고 noShowDeadline에 마감 시각이 있다.""")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "로그인 필요")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "도우미 계정이거나 비밀번호 변경 필요")
+    ResponseEntity<ApiResult<MyHelpRequestsResponseDto>> getMyRequests(@Parameter(hidden = true) AuthPrincipal principal);
 }

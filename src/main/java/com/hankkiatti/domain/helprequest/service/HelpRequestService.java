@@ -1,9 +1,15 @@
 package com.hankkiatti.domain.helprequest.service;
 
+import com.hankkiatti.domain.application.entity.Application;
+import com.hankkiatti.domain.application.repository.ApplicationRepository;
 import com.hankkiatti.domain.auth.exception.AuthErrorType;
 import com.hankkiatti.domain.auth.exception.AuthException;
+import com.hankkiatti.domain.helper.entity.Helper;
 import com.hankkiatti.domain.helprequest.dto.request.HelpRequestCreateRequestDto;
 import com.hankkiatti.domain.helprequest.dto.response.HelpRequestCreateResponseDto;
+import com.hankkiatti.domain.helprequest.dto.response.MatchedHelperResponseDto;
+import com.hankkiatti.domain.helprequest.dto.response.MyHelpRequestResponseDto;
+import com.hankkiatti.domain.helprequest.dto.response.MyHelpRequestsResponseDto;
 import com.hankkiatti.domain.helprequest.entity.HelpRequest;
 import com.hankkiatti.domain.helprequest.entity.HelpType;
 import com.hankkiatti.domain.helprequest.exception.HelpRequestErrorType;
@@ -13,6 +19,10 @@ import com.hankkiatti.domain.student.entity.Student;
 import com.hankkiatti.domain.student.repository.StudentRepository;
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -29,6 +39,7 @@ public class HelpRequestService {
 
     private final HelpRequestRepository helpRequestRepository;
     private final StudentRepository studentRepository;
+    private final ApplicationRepository applicationRepository;
     private final HelpRequestSchedule helpRequestSchedule;
     private final Clock clock;
 
@@ -64,6 +75,56 @@ public class HelpRequestService {
         return new HelpRequestCreateResponseDto(helpRequest.getId(), helpRequest.getStartAt(), helpRequest.getEndAt(),
                 helpRequest.getHelpTypes().stream().sorted().toList(), helpRequest.getOtherHelpText(),
                 helpRequest.getMemo(), helpRequest.getStatus());
+    }
+
+    /**
+     * 내 신청 (F-02 홈). 진행 중(모집 중·매칭 완료)이면 다가오는 신청, 끝났으면 지난 신청이다 (Figma "F-02 내 신청 · 목록").
+     * 매칭된 도우미는 이름·카톡 ID만 넣고, 예비 명단·도우미 전화번호는 넣지 않는다.
+     */
+    @Transactional(readOnly = true)
+    public MyHelpRequestsResponseDto getMyRequests(Long accountId) {
+        if (!studentRepository.existsById(accountId)) {
+            throw new AuthException(AuthErrorType.ACCESS_DENIED, "장애학생 전용, accountId=" + accountId);
+        }
+        List<HelpRequest> requests = helpRequestRepository.findByStudentAccountId(accountId);
+        Map<Long, Helper> helpers = matchedHelpers(requests);
+        LocalDateTime now = LocalDateTime.now(clock);
+
+        Comparator<HelpRequest> byStartAt = Comparator.comparing(HelpRequest::getStartAt)
+                .thenComparing(HelpRequest::getId);
+        List<MyHelpRequestResponseDto> upcoming = requests.stream()
+                .filter(request -> request.getStatus().isInProgress())
+                .sorted(byStartAt)
+                .map(request -> toMyRequest(request, helpers.get(request.getId()), now))
+                .toList();
+        List<MyHelpRequestResponseDto> past = requests.stream()
+                .filter(request -> !request.getStatus().isInProgress())
+                .sorted(byStartAt.reversed())
+                .map(request -> toMyRequest(request, helpers.get(request.getId()), now))
+                .toList();
+        return new MyHelpRequestsResponseDto(upcoming, past);
+    }
+
+    // 신청 ID → 매칭된 도우미. 한 신청에 매칭된 지원이 여럿이면 가장 최근 지원의 도우미
+    private Map<Long, Helper> matchedHelpers(List<HelpRequest> requests) {
+        if (requests.isEmpty()) {
+            return Map.of();
+        }
+        List<Long> ids = requests.stream().map(HelpRequest::getId).toList();
+        return applicationRepository.findMatchedWithHelper(ids).stream()
+                .sorted(Comparator.comparing(Application::getId))
+                .collect(Collectors.toMap(application -> application.getHelpRequest().getId(), Application::getHelper,
+                        (older, newer) -> newer));
+    }
+
+    private MyHelpRequestResponseDto toMyRequest(HelpRequest request, Helper helper, LocalDateTime now) {
+        boolean noShowReportable = request.canReportNoShow(now);
+        return new MyHelpRequestResponseDto(request.getId(), request.getStartAt(), request.getEndAt(),
+                request.getStatus(), request.getHelpTypes().stream().sorted().toList(), request.getOtherHelpText(),
+                request.getMemo(),
+                helper == null ? null : new MatchedHelperResponseDto(helper.getName(), helper.getKakaoId()),
+                request.isHelperChanged(), noShowReportable,
+                noShowReportable ? request.noShowReportDeadline() : null);
     }
 
     private static String trimToNull(String value) {
