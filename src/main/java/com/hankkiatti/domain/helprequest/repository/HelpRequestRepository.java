@@ -24,6 +24,25 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequest, Long> 
     Optional<HelpRequest> findByIdForUpdate(@Param("id") Long id);
 
     /**
+     * 장애학생의 진행 중인 신청(모집 중·매칭 완료) 가운데 [start, end)와 구간이 겹치는 것이 있는지.
+     * 끝 시각과 시작 시각이 같으면 겹치지 않는다 (예: 12:00~13:00과 13:00~14:00).
+     */
+    default boolean existsOverlapping(Long studentId, LocalDateTime start, LocalDateTime end) {
+        return existsOverlappingWithStatus(studentId, start, end,
+                List.of(HelpRequestStatus.RECRUITING, HelpRequestStatus.MATCHED));
+    }
+
+    @Query("""
+            select case when count(r) > 0 then true else false end from HelpRequest r
+            where r.student.accountId = :studentId
+              and r.status in :statuses
+              and r.startAt < :end and :start < r.endAt""")
+    boolean existsOverlappingWithStatus(@Param("studentId") Long studentId,
+                                        @Param("start") LocalDateTime start,
+                                        @Param("end") LocalDateTime end,
+                                        @Param("statuses") List<HelpRequestStatus> statuses);
+
+    /**
      * 식사가 시작됐는데 아직 처리할 게 남은 신청: 모집 중이거나 예비 지원이 남아 있는 신청.
      */
     default List<Long> findIdsToStart(LocalDateTime now, int limit) {

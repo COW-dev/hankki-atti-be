@@ -60,6 +60,13 @@ public class HelpRequestSchedule {
                 .toList();
     }
 
+    /**
+     * 지금 신청할 수 있는 시작 시각인지. 선택지(bookableStartTimes)에 있는 시각만 받는다.
+     */
+    public boolean isBookable(LocalDateTime startAt, LocalDateTime now) {
+        return bookableStartTimes(now).contains(startAt);
+    }
+
     // 공휴일 판단은 여기 한 곳에서만 한다. 공휴일 자동 동기화(BE-82)를 붙이면 상수 대신 저장된 목록을 읽게 바꾼다
     public boolean isHoliday(LocalDate date) {
         return HOLIDAYS.contains(date);

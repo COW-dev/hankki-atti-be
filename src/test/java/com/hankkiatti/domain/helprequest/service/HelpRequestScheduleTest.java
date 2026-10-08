@@ -102,4 +102,17 @@ class HelpRequestScheduleTest {
         assertThat(schedule.isHoliday(LocalDate.of(2026, 12, 25))).isTrue();
         assertThat(schedule.isHoliday(MONDAY)).isFalse();
     }
+
+    @Test
+    void isBookable_선택지에있는시각만() {
+        // given
+        LocalDateTime now = MONDAY.atTime(12, 10);
+
+        // when & then
+        assertThat(schedule.isBookable(MONDAY.atTime(12, 30), now)).isTrue();
+        assertThat(schedule.isBookable(MONDAY.atTime(12, 0), now)).isFalse();             // 이미 시작
+        assertThat(schedule.isBookable(MONDAY.atTime(12, 15), now)).isFalse();            // 30분 단위 아님
+        assertThat(schedule.isBookable(MONDAY.plusDays(5).atTime(12, 0), now)).isFalse(); // 토요일
+        assertThat(schedule.isBookable(MONDAY.plusDays(8).atTime(12, 0), now)).isFalse(); // 7일 넘음
+    }
 }

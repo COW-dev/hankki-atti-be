@@ -168,4 +168,51 @@ class DomainRepositoryTest {
         // then
         assertThat(applicationRepository.count()).isEqualTo(2);
     }
+
+    @Test
+    void existsOverlapping_30분겹치면있음_끝과시작이같으면없음() {
+        // given — 12:00~13:00 모집 중
+        Student student = saveStudent();
+        LocalDateTime noon = LocalDateTime.of(2026, 10, 12, 12, 0);
+        helpRequestRepository.save(new HelpRequest(student, noon, Set.of(HelpType.SERVING), null, null));
+        flushAndClear();
+        Long studentId = student.getAccountId();
+
+        // when & then
+        assertThat(helpRequestRepository.existsOverlapping(studentId, noon.plusMinutes(30), noon.plusMinutes(90)))
+                .isTrue();
+        assertThat(helpRequestRepository.existsOverlapping(studentId, noon.minusMinutes(30), noon.plusMinutes(30)))
+                .isTrue();
+        assertThat(helpRequestRepository.existsOverlapping(studentId, noon.plusHours(1), noon.plusHours(2))).isFalse();
+        assertThat(helpRequestRepository.existsOverlapping(studentId, noon.minusHours(1), noon)).isFalse();
+    }
+
+    @Test
+    void existsOverlapping_매칭완료는세고_철회와매칭실패와다른장애학생건은세지않음() {
+        // given
+        Student student = saveStudent();
+        Account otherAccount = saveAccount("60209999", AccountRole.STUDENT);
+        Student other = studentRepository.save(new Student(otherAccount, "박학생", "60209999", "010-0000-0000",
+                "kakao3", "other@mju.ac.kr", DisabilityType.VISUAL, null));
+        LocalDateTime noon = LocalDateTime.of(2026, 10, 12, 12, 0);
+        LocalDateTime evening = LocalDateTime.of(2026, 10, 12, 17, 0);
+
+        HelpRequest withdrawn = new HelpRequest(student, noon, Set.of(HelpType.SERVING), null, null);
+        withdrawn.withdraw(NOW);
+        HelpRequest failed = new HelpRequest(student, noon, Set.of(HelpType.SERVING), null, null);
+        failed.fail();
+        HelpRequest matched = new HelpRequest(student, evening, Set.of(HelpType.SERVING), null, null);
+        matched.match(NOW);
+        helpRequestRepository.save(withdrawn);
+        helpRequestRepository.save(failed);
+        helpRequestRepository.save(matched);
+        helpRequestRepository.save(new HelpRequest(other, noon, Set.of(HelpType.SERVING), null, null));
+        flushAndClear();
+
+        // when & then
+        assertThat(helpRequestRepository.existsOverlapping(student.getAccountId(), noon, noon.plusHours(1)))
+                .isFalse();
+        assertThat(helpRequestRepository.existsOverlapping(student.getAccountId(), evening, evening.plusHours(1)))
+                .isTrue();
+    }
 }
