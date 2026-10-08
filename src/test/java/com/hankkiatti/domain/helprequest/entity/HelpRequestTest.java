@@ -3,11 +3,16 @@ package com.hankkiatti.domain.helprequest.entity;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.hankkiatti.domain.account.entity.AccountRole;
 import com.hankkiatti.domain.helprequest.exception.HelpRequestErrorType;
 import com.hankkiatti.domain.helprequest.exception.HelpRequestException;
+import com.hankkiatti.domain.student.entity.Student;
+import com.hankkiatti.support.TestAccounts;
+import com.hankkiatti.support.TestProfiles;
 import java.time.LocalDateTime;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
 class HelpRequestTest {
 
@@ -336,5 +341,28 @@ class HelpRequestTest {
         assertThat(matched.canReportNoShow(NOW)).isFalse();
         assertThat(matched.noShowReportDeadline()).isNull();
         assertThat(noShow.canReportNoShow(START.plusHours(3))).isFalse();
+    }
+
+    @Test
+    void withdraw_식사시작시각부터_예외() {
+        // given
+        HelpRequest request = newRequest();
+
+        // when & then
+        assertInvalidStatus(() -> request.withdraw(START));
+        assertInvalidStatus(() -> request.withdraw(START.plusMinutes(1)));
+        assertThat(request.getStatus()).isEqualTo(HelpRequestStatus.RECRUITING);
+    }
+
+    @Test
+    void isRequestedBy_신청한장애학생만참() {
+        // given — 저장 전이라 @MapsId 키를 직접 넣는다
+        Student student = TestProfiles.student(TestAccounts.withId(1L, AccountRole.STUDENT, "hash", false));
+        ReflectionTestUtils.setField(student, "accountId", 1L);
+        HelpRequest request = new HelpRequest(student, START, Set.of(HelpType.SERVING), null, null);
+
+        // when & then
+        assertThat(request.isRequestedBy(1L)).isTrue();
+        assertThat(request.isRequestedBy(2L)).isFalse();
     }
 }

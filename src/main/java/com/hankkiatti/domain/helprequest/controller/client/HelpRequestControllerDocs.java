@@ -2,6 +2,7 @@ package com.hankkiatti.domain.helprequest.controller.client;
 
 import com.hankkiatti.domain.helprequest.dto.request.HelpRequestCreateRequestDto;
 import com.hankkiatti.domain.helprequest.dto.response.HelpRequestCreateResponseDto;
+import com.hankkiatti.domain.helprequest.dto.response.MyHelpRequestResponseDto;
 import com.hankkiatti.domain.helprequest.dto.response.MyHelpRequestsResponseDto;
 import com.hankkiatti.domain.helprequest.dto.response.TimeOptionDateResponseDto;
 import com.hankkiatti.global.response.ApiResult;
@@ -47,4 +48,16 @@ public interface HelpRequestControllerDocs {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "로그인 필요")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "도우미 계정이거나 비밀번호 변경 필요")
     ResponseEntity<ApiResult<MyHelpRequestsResponseDto>> getMyRequests(@Parameter(hidden = true) AuthPrincipal principal);
+
+    @Operation(summary = "신청 철회", description = """
+            모집 중인 내 신청을 바로 철회한다 (확인 단계 없음). 철회된 신청은 취소 완료가 되어 내 신청의 지난 신청으로 간다.
+            응답은 철회된 신청이고 내 신청 조회(GET /api/help-requests/me)의 항목과 같은 모양이다.
+            모집 중이 아니거나(이미 매칭·철회·실패) 식사가 이미 시작됐으면 409.""")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "철회 완료 (status: CANCELED)")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "로그인 필요")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "도우미 계정이거나 비밀번호 변경 필요")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "HELP_REQUEST_NOT_FOUND — 없는 신청이거나 내 신청이 아님")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "HELP_REQUEST_INVALID_STATUS — 모집 중이 아니거나 식사가 이미 시작됨")
+    ResponseEntity<ApiResult<MyHelpRequestResponseDto>> withdraw(@Parameter(hidden = true) AuthPrincipal principal,
+                                                                @Parameter(description = "신청 ID") Long helpRequestId);
 }

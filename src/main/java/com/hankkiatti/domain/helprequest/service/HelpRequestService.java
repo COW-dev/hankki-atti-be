@@ -83,9 +83,7 @@ public class HelpRequestService {
      */
     @Transactional(readOnly = true)
     public MyHelpRequestsResponseDto getMyRequests(Long accountId) {
-        if (!studentRepository.existsById(accountId)) {
-            throw new AuthException(AuthErrorType.ACCESS_DENIED, "장애학생 전용, accountId=" + accountId);
-        }
+        requireStudent(accountId);
         List<HelpRequest> requests = helpRequestRepository.findByStudentAccountId(accountId);
         Map<Long, Helper> helpers = matchedHelpers(requests);
         LocalDateTime now = LocalDateTime.now(clock);
@@ -103,6 +101,31 @@ public class HelpRequestService {
                 .map(request -> toMyRequest(request, helpers.get(request.getId()), now))
                 .toList();
         return new MyHelpRequestsResponseDto(upcoming, past);
+    }
+
+    /**
+     * 모집 중인 내 신청을 바로 철회한다 (기능명세서 "신청 철회", 확인 단계 없음). 식사가 시작된 신청은 철회할 수 없다.
+     * 신청 행을 잠가, 같은 신청에 동시에 들어온 철회·지원 가운데 먼저 잡은 쪽만 성공한다.
+     */
+    @Transactional
+    public MyHelpRequestResponseDto withdraw(Long accountId, Long helpRequestId) {
+        requireStudent(accountId);
+        HelpRequest request = helpRequestRepository.findByIdForUpdate(helpRequestId)
+                .filter(found -> found.isRequestedBy(accountId))
+                .orElseThrow(() -> new HelpRequestException(HelpRequestErrorType.NOT_FOUND,
+                        "helpRequestId=" + helpRequestId + ", accountId=" + accountId));
+
+        LocalDateTime now = LocalDateTime.now(clock);
+        request.withdraw(now);
+        log.info("신청 철회: helpRequestId={}, studentId={}", helpRequestId, accountId);
+        // 모집 중이던 신청이라 매칭된 도우미가 없다
+        return toMyRequest(request, null, now);
+    }
+
+    private void requireStudent(Long accountId) {
+        if (!studentRepository.existsById(accountId)) {
+            throw new AuthException(AuthErrorType.ACCESS_DENIED, "장애학생 전용, accountId=" + accountId);
+        }
     }
 
     // 신청 ID → 매칭된 도우미. 한 신청에 매칭된 지원이 여럿이면 가장 최근 지원의 도우미

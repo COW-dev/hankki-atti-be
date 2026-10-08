@@ -21,6 +21,7 @@ import com.hankkiatti.domain.helprequest.dto.response.MyHelpRequestsResponseDto;
 import com.hankkiatti.domain.helprequest.entity.HelpRequest;
 import com.hankkiatti.domain.helprequest.entity.HelpRequestStatus;
 import com.hankkiatti.domain.helprequest.entity.HelpType;
+import com.hankkiatti.domain.helprequest.entity.RequestCancelType;
 import com.hankkiatti.domain.helprequest.exception.HelpRequestErrorType;
 import com.hankkiatti.domain.helprequest.exception.HelpRequestException;
 import com.hankkiatti.domain.helprequest.repository.HelpRequestRepository;
@@ -267,5 +268,70 @@ class HelpRequestServiceTest {
         assertThatThrownBy(() -> helpRequestService.getMyRequests(2L))
                 .isInstanceOf(AuthException.class)
                 .extracting("errorCode").isEqualTo(AuthErrorType.ACCESS_DENIED);
+    }
+
+    // ---- 신청 철회 (지금 = 2026-10-12(월) 09:00) ----
+
+    private HelpRequest myRecruitingRequest(Long id, LocalDateTime startAt) {
+        Student student = myStudent();
+        ReflectionTestUtils.setField(student, "accountId", STUDENT_ID);
+        return requestWithId(id, student, startAt);
+    }
+
+    @Test
+    void withdraw_내모집중신청_취소완료로바뀐신청반환() {
+        // given
+        HelpRequest request = myRecruitingRequest(1L, NOON);
+        given(studentRepository.existsById(STUDENT_ID)).willReturn(true);
+        given(helpRequestRepository.findByIdForUpdate(1L)).willReturn(Optional.of(request));
+
+        // when
+        MyHelpRequestResponseDto result = helpRequestService.withdraw(STUDENT_ID, 1L);
+
+        // then
+        assertThat(request.getStatus()).isEqualTo(HelpRequestStatus.CANCELED);
+        assertThat(request.getCancelType()).isEqualTo(RequestCancelType.STUDENT_WITHDRAW);
+        assertThat(request.getCanceledAt()).isEqualTo(MONDAY.atTime(9, 0));
+        assertThat(result.id()).isEqualTo(1L);
+        assertThat(result.status()).isEqualTo(HelpRequestStatus.CANCELED);
+        assertThat(result.helper()).isNull();
+    }
+
+    @Test
+    void withdraw_없는신청과남의신청_NOT_FOUND() {
+        // given
+        HelpRequest othersRequest = myRecruitingRequest(2L, NOON);
+        given(studentRepository.existsById(3L)).willReturn(true);
+        given(helpRequestRepository.findByIdForUpdate(2L)).willReturn(Optional.of(othersRequest));
+        given(helpRequestRepository.findByIdForUpdate(99L)).willReturn(Optional.empty());
+
+        // when & then
+        assertErrorType(() -> helpRequestService.withdraw(3L, 2L), HelpRequestErrorType.NOT_FOUND);
+        assertErrorType(() -> helpRequestService.withdraw(3L, 99L), HelpRequestErrorType.NOT_FOUND);
+        assertThat(othersRequest.getStatus()).isEqualTo(HelpRequestStatus.RECRUITING);
+    }
+
+    @Test
+    void withdraw_매칭완료신청_INVALID_STATUS() {
+        // given
+        HelpRequest request = myRecruitingRequest(1L, NOON);
+        request.match(MONDAY.atTime(8, 0));
+        given(studentRepository.existsById(STUDENT_ID)).willReturn(true);
+        given(helpRequestRepository.findByIdForUpdate(1L)).willReturn(Optional.of(request));
+
+        // when & then
+        assertErrorType(() -> helpRequestService.withdraw(STUDENT_ID, 1L), HelpRequestErrorType.INVALID_STATUS);
+    }
+
+    @Test
+    void withdraw_장애학생이아닌계정_ACCESS_DENIED이고신청을잠그지않음() {
+        // given
+        given(studentRepository.existsById(2L)).willReturn(false);
+
+        // when & then
+        assertThatThrownBy(() -> helpRequestService.withdraw(2L, 1L))
+                .isInstanceOf(AuthException.class)
+                .extracting("errorCode").isEqualTo(AuthErrorType.ACCESS_DENIED);
+        verify(helpRequestRepository, never()).findByIdForUpdate(anyLong());
     }
 }

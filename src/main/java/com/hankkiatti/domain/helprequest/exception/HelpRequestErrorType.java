@@ -8,6 +8,8 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public enum HelpRequestErrorType implements ErrorCode {
 
+    // 없는 신청과 다른 장애학생의 신청을 구분하지 않는다 (남의 신청이 있는지 드러내지 않으려고)
+    NOT_FOUND(404, "신청을 찾을 수 없습니다."),
     INVALID_STATUS(409, "현재 상태에서는 처리할 수 없는 신청입니다."),
     HELP_TYPE_REQUIRED(422, "필요한 도움을 하나 이상 선택해 주세요."),
     OTHER_HELP_TEXT_REQUIRED(422, "기타 도움 내용을 입력해 주세요."),
