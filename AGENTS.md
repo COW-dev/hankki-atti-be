@@ -100,7 +100,7 @@ domain/{도메인}/
 **도메인 목록**
 ```
 domain/
-├── common/       BaseTimeEntity, LabeledEnum, AbstractEnumConverter
+├── common/       BaseTimeEntity, LabeledEnum, AbstractEnumConverter, PhoneNumbers, 공통 검증(@PhoneNumber·@KakaoId)
 ├── account/      Account, AccountRole, AccountStatus
 ├── auth/         RefreshToken, PasswordResetToken, TokenAudience, 로그인·토큰·비밀번호 변경·재설정 API
 ├── mail/         MailOutbox, 메일 아웃박스 적재·발송(MailOutboxService, MailRelay)
@@ -124,6 +124,7 @@ domain/
 - 신규 Request DTO는 `record`로 작성
 - DTO 이름은 `XxxRequestDto` 형식 (접미사 `Dto` 포함)
 - Validation 어노테이션은 **반드시 별도 줄**에 배치 (한 줄 몰아쓰기 금지)
+- 공통 규칙이 있는 값은 공통 검증 어노테이션을 쓴다: 비밀번호 `@Password`, 휴대전화 `@PhoneNumber`, 카톡 ID `@KakaoId`. null은 통과시키므로 `@NotBlank`를 함께 붙이고, 전화번호는 `PhoneNumbers.normalize`로 하이픈 형식(010-1234-5678)으로 맞춰 저장한다
 
 ```java
 // 올바른 예

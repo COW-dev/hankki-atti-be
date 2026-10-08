@@ -1,5 +1,6 @@
 package com.hankkiatti.domain.account.controller;
 
+import com.hankkiatti.domain.account.dto.request.MeContactUpdateRequestDto;
 import com.hankkiatti.domain.account.dto.request.MeSettingsUpdateRequestDto;
 import com.hankkiatti.domain.account.dto.response.MeResponseDto;
 import com.hankkiatti.domain.account.service.AccountService;
@@ -36,5 +37,13 @@ public class MeController implements MeControllerDocs {
             @AuthenticationPrincipal AuthPrincipal principal,
             @Valid @RequestBody MeSettingsUpdateRequestDto request) {
         return ApiResponse.of(SuccessType.SUCCESS, accountService.updateSettings(principal.accountId(), request));
+    }
+
+    @Override
+    @PatchMapping("/contact")
+    public ResponseEntity<ApiResult<MeResponseDto>> updateContact(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @Valid @RequestBody MeContactUpdateRequestDto request) {
+        return ApiResponse.of(SuccessType.SUCCESS, accountService.updateContact(principal.accountId(), request));
     }
 }
