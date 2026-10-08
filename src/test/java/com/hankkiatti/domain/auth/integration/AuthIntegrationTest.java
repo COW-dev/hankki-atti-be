@@ -14,6 +14,8 @@ import com.hankkiatti.domain.admin.entity.Admin;
 import com.hankkiatti.domain.admin.entity.AdminGrade;
 import com.hankkiatti.domain.admin.repository.AdminRepository;
 import com.hankkiatti.domain.auth.exception.AuthErrorType;
+import com.hankkiatti.domain.student.repository.StudentRepository;
+import com.hankkiatti.support.TestProfiles;
 import com.jayway.jsonpath.JsonPath;
 import jakarta.servlet.http.Cookie;
 import java.time.LocalDateTime;
@@ -50,11 +52,19 @@ class AuthIntegrationTest {
     private AdminRepository adminRepository;
 
     @Autowired
+    private StudentRepository studentRepository;
+
+    @Autowired
     private PasswordEncoder passwordEncoder;
 
     private Account saveAccount(String loginId, AccountRole role, boolean mustChangePassword) {
-        return accountRepository.save(
+        Account account = accountRepository.save(
                 new Account(loginId, passwordEncoder.encode(PASSWORD), role, mustChangePassword, false));
+        // /api/me가 장애학생 프로필을 읽으므로 함께 만든다
+        if (role == AccountRole.STUDENT) {
+            studentRepository.save(TestProfiles.student(account));
+        }
+        return account;
     }
 
     private MockHttpServletResponse login(String path, String loginId, String password) throws Exception {
