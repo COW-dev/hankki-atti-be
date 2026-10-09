@@ -79,6 +79,11 @@ public class Student extends BaseTimeEntity {
         this.specialNote = specialNote;
     }
 
+    public void markCredentialMailPending() {
+        this.credentialMailStatus = CredentialMailStatus.PENDING;
+        this.credentialMailSentAt = null;
+    }
+
     public void markCredentialMailSent(LocalDateTime now) {
         this.credentialMailStatus = CredentialMailStatus.SENT;
         this.credentialMailSentAt = now;
