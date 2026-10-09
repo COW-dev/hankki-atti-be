@@ -26,9 +26,17 @@ public class ApplyPolicy {
         if (alreadyApplied) {
             return ApplyBlockReason.ALREADY_APPLIED;
         }
-        boolean overlapsConfirmed = helperActive.stream()
+        return overlapsConfirmed(request, helperActive) ? ApplyBlockReason.TIME_OVERLAP : null;
+    }
+
+    /**
+     * 도우미의 다른 신청 확정 매칭(매칭 완료·승격 응답 대기)과 이 신청의 이용 시간이 겹치는지. 같은 신청의 지원은 보지 않는다.
+     * 지원 검증과 예비 승격 후보 확인(BE-34)이 같이 쓴다.
+     */
+    public boolean overlapsConfirmed(HelpRequest request, List<Application> helperActive) {
+        return helperActive.stream()
+                .filter(application -> !application.getHelpRequest().getId().equals(request.getId()))
                 .filter(application -> application.getStatus().isConfirmed())
                 .anyMatch(application -> application.getHelpRequest().overlaps(request.getStartAt(), request.getEndAt()));
-        return overlapsConfirmed ? ApplyBlockReason.TIME_OVERLAP : null;
     }
 }
