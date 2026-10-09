@@ -71,4 +71,16 @@ class ApplyPolicyTest {
         assertThat(applyPolicy.blockReason(request(1L, NOON.plusHours(1)), List.of(matched(request(2L, NOON)))))
                 .isNull();
     }
+
+    @Test
+    void overlapsConfirmed_같은신청의지원은보지않고_다른신청확정매칭만본다() {
+        // given — 승격 후보 확인: 이 신청의 내 예비는 무시, 다른 신청 매칭과 30분 겹침
+        HelpRequest target = request(1L, NOON);
+        HelpRequest other = request(2L, NOON.plusMinutes(30));
+
+        // when & then
+        assertThat(applyPolicy.overlapsConfirmed(target, List.of(waiting(target)))).isFalse();
+        assertThat(applyPolicy.overlapsConfirmed(target, List.of(waiting(target), matched(other)))).isTrue();
+        assertThat(applyPolicy.overlapsConfirmed(target, List.of(waiting(target), waiting(other)))).isFalse();
+    }
 }

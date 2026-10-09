@@ -2,10 +2,13 @@ package com.hankkiatti.domain.application.repository;
 
 import com.hankkiatti.domain.application.entity.Application;
 import com.hankkiatti.domain.application.entity.ApplicationStatus;
+import jakarta.persistence.LockModeType;
 import java.math.BigDecimal;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -15,6 +18,35 @@ public interface ApplicationRepository extends JpaRepository<Application, Long> 
 
     // 예비 순번 계산용. 신청 행을 잠근 뒤 세므로 그 사이 다른 예비가 끼어들지 않는다
     long countByHelpRequestIdAndStatus(Long helpRequestId, ApplicationStatus status);
+
+    /**
+     * 내 지원의 신청 ID. 엔티티를 읽지 않고 값만 가져온다 — 신청 행을 잠그기 전에 지원 엔티티를 영속성 컨텍스트에 올리면
+     * 잠근 뒤 다시 읽어도 처음 읽은(오래된) 상태가 그대로 쓰인다. 남의 지원이면 비어 있다.
+     */
+    @Query("select a.helpRequest.id from Application a where a.id = :id and a.helper.accountId = :helperId")
+    Optional<Long> findHelpRequestIdByIdAndHelperId(@Param("id") Long id, @Param("helperId") Long helperId);
+
+    /**
+     * 지원 행을 잠그고 가져온다. 신청 행 락 다음에 잡는다 (락 순서: 신청 → 지원 → 도우미).
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select a from Application a where a.id = :id")
+    Optional<Application> findByIdForUpdate(@Param("id") Long id);
+
+    /**
+     * 신청의 예비를 지원 순으로 잠그고 가져온다 (예비 승격 후보). 신청 행 락 다음에 잡는다.
+     */
+    default List<Application> findWaitingForUpdate(Long helpRequestId) {
+        return findByHelpRequestIdAndStatusForUpdate(helpRequestId, ApplicationStatus.WAITING);
+    }
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select a from Application a
+            where a.helpRequest.id = :helpRequestId and a.status = :status
+            order by a.appliedAt, a.id""")
+    List<Application> findByHelpRequestIdAndStatusForUpdate(@Param("helpRequestId") Long helpRequestId,
+                                                            @Param("status") ApplicationStatus status);
 
     /**
      * 신청들에 매칭된 지원(매칭 완료·이용 완료·노쇼)을 도우미와 함께 가져온다. 장애학생에게 도우미 이름·카톡 ID를 보여 줄 때 쓴다.

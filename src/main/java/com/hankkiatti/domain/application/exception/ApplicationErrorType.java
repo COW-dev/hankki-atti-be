@@ -8,7 +8,11 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public enum ApplicationErrorType implements ErrorCode {
 
+    // 없는 지원과 다른 도우미의 지원을 구분하지 않는다 (남의 지원이 있는지 드러내지 않으려고)
+    NOT_FOUND(404, "지원을 찾을 수 없습니다."),
     INVALID_STATUS(409, "현재 상태에서는 처리할 수 없는 지원입니다."),
+    // 식사가 시작된 뒤의 도우미 취소 — 예비가 이미 종료돼 승격할 사람이 없다 (2026-10-09 결정)
+    MEAL_STARTED(409, "식사가 시작된 뒤에는 취소할 수 없습니다."),
     CANCEL_REASON_DETAIL_REQUIRED(422, "기타 사유를 입력해 주세요."),
     INVALID_CANCEL_REASON(422, "선택할 수 없는 취소 사유입니다."),
     // 모집 중·매칭 완료가 아니거나 식사가 이미 시작된 신청
