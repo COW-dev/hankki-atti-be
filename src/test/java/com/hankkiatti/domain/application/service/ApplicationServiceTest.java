@@ -6,10 +6,12 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.hankkiatti.domain.application.dto.response.ApplyResponseDto;
 import com.hankkiatti.domain.application.entity.Application;
 import com.hankkiatti.domain.application.entity.ApplicationStatus;
+import com.hankkiatti.domain.application.event.HelperConfirmedEvent;
 import com.hankkiatti.domain.application.exception.ApplicationErrorType;
 import com.hankkiatti.domain.application.exception.ApplicationException;
 import com.hankkiatti.domain.application.repository.ApplicationRepository;
@@ -34,6 +36,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
@@ -53,6 +56,9 @@ class ApplicationServiceTest {
     private HelperRepository helperRepository;
 
     @Mock
+    private ApplicationEventPublisher eventPublisher;
+
+    @Mock
     private ApplicationRepository applicationRepository;
 
     private ApplicationService applicationService;
@@ -64,7 +70,7 @@ class ApplicationServiceTest {
     void setUp() {
         Clock clock = Clock.fixed(NOW.atZone(SEOUL).toInstant(), SEOUL);
         applicationService = new ApplicationService(helpRequestRepository, helperRepository, applicationRepository,
-                new ApplyPolicy(), clock);
+                new ApplyPolicy(), eventPublisher, clock);
         ReflectionTestUtils.setField(me, "accountId", HELPER_ID);
     }
 
@@ -128,6 +134,7 @@ class ApplicationServiceTest {
         assertThat(result.student().kakaoId()).isEqualTo(student.getKakaoId());
         assertThat(request.getStatus()).isEqualTo(HelpRequestStatus.MATCHED);
         assertThat(request.getFirstMatchedAt()).isEqualTo(NOW);
+        verify(eventPublisher).publishEvent(new HelperConfirmedEvent(HELPER_ID, REQUEST_ID, NOON, NOON.plusHours(1)));
     }
 
     @Test
@@ -146,6 +153,7 @@ class ApplicationServiceTest {
         assertThat(result.status()).isEqualTo(ApplicationStatus.WAITING);
         assertThat(result.waitingOrder()).isEqualTo(2);
         assertThat(result.student()).isNull();
+        verifyNoInteractions(eventPublisher);
     }
 
     @Test

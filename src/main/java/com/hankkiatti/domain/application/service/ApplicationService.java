@@ -5,6 +5,7 @@ import com.hankkiatti.domain.application.dto.response.ApplyStudentResponseDto;
 import com.hankkiatti.domain.application.entity.Application;
 import com.hankkiatti.domain.application.entity.ApplicationStatus;
 import com.hankkiatti.domain.application.entity.ApplyBlockReason;
+import com.hankkiatti.domain.application.event.HelperConfirmedEvent;
 import com.hankkiatti.domain.application.exception.ApplicationErrorType;
 import com.hankkiatti.domain.application.exception.ApplicationException;
 import com.hankkiatti.domain.application.repository.ApplicationRepository;
@@ -23,6 +24,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,6 +40,7 @@ public class ApplicationService {
     private final HelperRepository helperRepository;
     private final ApplicationRepository applicationRepository;
     private final ApplyPolicy applyPolicy;
+    private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
 
     /**
@@ -76,6 +79,9 @@ public class ApplicationService {
             applicationRepository.save(application);
             log.info("지원 → 바로 매칭: applicationId={}, helpRequestId={}, helperId={}",
                     application.getId(), helpRequestId, helperId);
+            // 커밋 뒤 이 도우미의 겹치는 다른 예비를 자동 제외한다 (BE-32)
+            eventPublisher.publishEvent(
+                    new HelperConfirmedEvent(helperId, helpRequestId, request.getStartAt(), request.getEndAt()));
             Student student = request.getStudent();
             return toResponse(application, request, null,
                     new ApplyStudentResponseDto(student.getName(), student.getKakaoId()));

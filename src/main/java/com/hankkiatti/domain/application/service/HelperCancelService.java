@@ -6,6 +6,7 @@ import com.hankkiatti.domain.application.entity.Application;
 import com.hankkiatti.domain.application.entity.ApplicationAfterAction;
 import com.hankkiatti.domain.application.entity.ApplicationStatus;
 import com.hankkiatti.domain.application.entity.CancelReason;
+import com.hankkiatti.domain.application.event.HelperConfirmedEvent;
 import com.hankkiatti.domain.application.exception.ApplicationErrorType;
 import com.hankkiatti.domain.application.exception.ApplicationException;
 import com.hankkiatti.domain.application.repository.ApplicationRepository;
@@ -17,6 +18,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,6 +37,7 @@ public class HelperCancelService {
     private final HelpRequestRepository helpRequestRepository;
     private final HelperRepository helperRepository;
     private final ApplyPolicy applyPolicy;
+    private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
 
     /**
@@ -107,6 +110,9 @@ public class HelperCancelService {
         candidate.promote(now, false);
         request.changeHelper();
         log.info("예비 승격: applicationId={}, helpRequestId={}", candidate.getId(), request.getId());
+        // 커밋 뒤 승격된 도우미의 겹치는 다른 예비를 자동 제외한다 (BE-32)
+        eventPublisher.publishEvent(new HelperConfirmedEvent(candidate.getHelper().getAccountId(), request.getId(),
+                request.getStartAt(), request.getEndAt()));
     }
 
     private static ApplicationException notFound(Long applicationId, Long helperId) {
