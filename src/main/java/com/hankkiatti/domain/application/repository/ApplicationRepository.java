@@ -4,6 +4,7 @@ import com.hankkiatti.domain.application.entity.Application;
 import com.hankkiatti.domain.application.entity.ApplicationStatus;
 import jakarta.persistence.LockModeType;
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -32,6 +33,27 @@ public interface ApplicationRepository extends JpaRepository<Application, Long> 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select a from Application a where a.id = :id")
     Optional<Application> findByIdForUpdate(@Param("id") Long id);
+
+    /**
+     * 도우미의 예비 중 [start, end)와 이용 시간이 겹치는 것의 ID. 방금 매칭된 신청은 뺀다 (겹치는 예비 자동 제외 대상).
+     */
+    default List<Long> findWaitingIdsOverlapping(Long helperId, LocalDateTime start, LocalDateTime end,
+                                                 Long exceptHelpRequestId) {
+        return findIdsByHelperAndStatusOverlapping(helperId, ApplicationStatus.WAITING, start, end,
+                exceptHelpRequestId);
+    }
+
+    @Query("""
+            select a.id from Application a
+            where a.helper.accountId = :helperId and a.status = :status
+              and a.helpRequest.id <> :exceptHelpRequestId
+              and a.helpRequest.startAt < :end and :start < a.helpRequest.endAt
+            order by a.helpRequest.startAt, a.id""")
+    List<Long> findIdsByHelperAndStatusOverlapping(@Param("helperId") Long helperId,
+                                                   @Param("status") ApplicationStatus status,
+                                                   @Param("start") LocalDateTime start,
+                                                   @Param("end") LocalDateTime end,
+                                                   @Param("exceptHelpRequestId") Long exceptHelpRequestId);
 
     /**
      * 신청의 예비를 지원 순으로 잠그고 가져온다 (예비 승격 후보). 신청 행 락 다음에 잡는다.

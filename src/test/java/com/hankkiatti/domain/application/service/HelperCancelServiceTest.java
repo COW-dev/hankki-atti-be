@@ -3,6 +3,8 @@ package com.hankkiatti.domain.application.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.hankkiatti.domain.account.entity.AccountRole;
 import com.hankkiatti.domain.application.dto.request.HelperCancelRequestDto;
@@ -11,6 +13,7 @@ import com.hankkiatti.domain.application.entity.Application;
 import com.hankkiatti.domain.application.entity.ApplicationAfterAction;
 import com.hankkiatti.domain.application.entity.ApplicationStatus;
 import com.hankkiatti.domain.application.entity.CancelReason;
+import com.hankkiatti.domain.application.event.HelperConfirmedEvent;
 import com.hankkiatti.domain.application.exception.ApplicationErrorType;
 import com.hankkiatti.domain.application.exception.ApplicationException;
 import com.hankkiatti.domain.application.repository.ApplicationRepository;
@@ -33,6 +36,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
@@ -55,6 +59,9 @@ class HelperCancelServiceTest {
     @Mock
     private HelperRepository helperRepository;
 
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
+
     private HelperCancelService helperCancelService;
 
     private final Student student = TestHelpRequests.student("60231234");
@@ -69,7 +76,7 @@ class HelperCancelServiceTest {
     void setUp() {
         Clock clock = Clock.fixed(NOW.atZone(SEOUL).toInstant(), SEOUL);
         helperCancelService = new HelperCancelService(applicationRepository, helpRequestRepository, helperRepository,
-                new ApplyPolicy(), clock);
+                new ApplyPolicy(), eventPublisher, clock);
         request = request(REQUEST_ID, NOON);
         request.match(NOW.minusDays(1));
         mine = application(MY_APPLICATION_ID, request, me);
@@ -142,6 +149,7 @@ class HelperCancelServiceTest {
         assertThat(waitingSecond.getStatus()).isEqualTo(ApplicationStatus.WAITING);
         assertThat(request.getStatus()).isEqualTo(HelpRequestStatus.MATCHED);
         assertThat(request.isHelperChanged()).isTrue();
+        verify(eventPublisher).publishEvent(new HelperConfirmedEvent(8L, REQUEST_ID, NOON, NOON.plusHours(1)));
     }
 
     @Test
@@ -157,6 +165,7 @@ class HelperCancelServiceTest {
         assertThat(mine.getAfterAction()).isEqualTo(ApplicationAfterAction.REOPENED);
         assertThat(request.getStatus()).isEqualTo(HelpRequestStatus.RECRUITING);
         assertThat(request.isHelperChanged()).isFalse();
+        verifyNoInteractions(eventPublisher);
     }
 
     @Test
