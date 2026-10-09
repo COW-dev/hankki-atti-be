@@ -109,7 +109,7 @@ domain/
 ├── helper/       Helper, 도우미 회원가입(HelperSignupService, 공개 경로 `/api/helpers/signup`)
 ├── admin/        Admin, AdminGrade
 ├── helprequest/  HelpRequest, HelpType, HelpRequestStatus, RequestCancelType, Meal, 신청 가능 날짜·시각(HelpRequestSchedule), 식사 시작·종료 자동 처리(MealTimeJob)
-└── application/  Application, ApplicationStatus(ACTIVE·CONFIRMED), CancelReason, ApplicationAfterAction, 지원 결과 예상 ApplyOutcome·ApplyBlockReason(저장 안 함)
+└── application/  Application, ApplicationStatus(ACTIVE·CONFIRMED), CancelReason, ApplicationAfterAction, 지원(ApplicationService), 도우미 매칭 취소·예비 승격(HelperCancelService), 지원 가능 규칙(ApplyPolicy — 요청 목록 카드·지원 검증·승격 후보 확인이 같이 씀), 지원 결과 예상 ApplyOutcome·ApplyBlockReason(저장 안 함)
 ```
 - `Student`·`Helper`·`Admin`은 `Account`와 PK를 공유하는 1:1 프로필이다 (`@MapsId`)
 
@@ -321,6 +321,8 @@ public class HelpRequest extends BaseTimeEntity {
 - 서버가 여러 대일 수 있으므로 예약 작업은 같은 대상을 두 서버가 동시에 처리해도 안전해야 한다 (조건부 UPDATE로 선점 등)
 - 시간 기반 자동 처리는 "시각이 지났는데 상태가 그대로인 건"을 찾아 처리한다 (놓친 건도 다음 실행에서 따라잡는다). 대상 ID만 먼저 조회하고, 한 건씩 별도 트랜잭션에서 `findByIdForUpdate`로 잠근 뒤 상태·시각을 다시 확인하고 바꾼다 — 사용자 요청과 겹쳐도 순서가 맞고, 한 건 실패가 다른 건에 번지지 않는다
 - 신청 상태를 바꾸는 작업(지원·취소·승격·자동 처리)은 모두 `HelpRequestRepository.findByIdForUpdate`로 신청 행을 잠근다
+- 지원 행·도우미 행도 잠가야 하는 작업(지원 — 같은 도우미의 겹치는 지원을 한 줄로 세움, 도우미 취소·예비 승격 등)은 **신청 → 지원 → 도우미** 순서로 잠근다(`ApplicationRepository.findByIdForUpdate`·`findWaitingForUpdate`, `HelperRepository.findByIdForUpdate`). 순서가 어긋나면 교착이 생긴다. 잠금은 트랜잭션의 첫 쿼리로 둔다 — MySQL(REPEATABLE READ)에서 잠금 뒤 첫 일반 조회가 스냅샷이 되어야 먼저 커밋된 다른 요청까지 보인다
+  - 지원 ID로 시작하는 작업(도우미 취소)은 신청 ID를 알려고 먼저 읽어야 해서 첫 쿼리를 잠금으로 둘 수 없다. 이런 트랜잭션은 `@Transactional(isolation = READ_COMMITTED)`로 두고, 잠그기 전에는 엔티티가 아니라 값(신청 ID)만 읽는다 — 먼저 읽은 엔티티는 잠근 뒤 다시 조회해도 처음 읽은 상태가 쓰인다
 
 ---
 
