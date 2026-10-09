@@ -12,6 +12,7 @@ import com.hankkiatti.domain.application.entity.Application;
 import com.hankkiatti.domain.application.entity.ApplyBlockReason;
 import com.hankkiatti.domain.application.entity.ApplyOutcome;
 import com.hankkiatti.domain.application.repository.ApplicationRepository;
+import com.hankkiatti.domain.application.service.ApplyPolicy;
 import com.hankkiatti.domain.auth.exception.AuthErrorType;
 import com.hankkiatti.domain.auth.exception.AuthException;
 import com.hankkiatti.domain.helper.entity.Helper;
@@ -68,7 +69,7 @@ class OpenHelpRequestServiceTest {
     void setUp() {
         Clock clock = Clock.fixed(NOW.atZone(SEOUL).toInstant(), SEOUL);
         openHelpRequestService = new OpenHelpRequestService(helpRequestRepository, applicationRepository,
-                helperRepository, clock);
+                helperRepository, new ApplyPolicy(), clock);
     }
 
     private void givenHelper() {

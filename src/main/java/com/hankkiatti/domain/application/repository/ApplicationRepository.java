@@ -13,6 +13,9 @@ public interface ApplicationRepository extends JpaRepository<Application, Long> 
 
     List<Application> findByHelpRequestIdAndStatus(Long helpRequestId, ApplicationStatus status);
 
+    // 예비 순번 계산용. 신청 행을 잠근 뒤 세므로 그 사이 다른 예비가 끼어들지 않는다
+    long countByHelpRequestIdAndStatus(Long helpRequestId, ApplicationStatus status);
+
     /**
      * 신청들에 매칭된 지원(매칭 완료·이용 완료·노쇼)을 도우미와 함께 가져온다. 장애학생에게 도우미 이름·카톡 ID를 보여 줄 때 쓴다.
      * 승격 응답 대기 중인 지원은 넣지 않는다 — 확정되지 않은 도우미의 연락처를 미리 알리지 않으려고.

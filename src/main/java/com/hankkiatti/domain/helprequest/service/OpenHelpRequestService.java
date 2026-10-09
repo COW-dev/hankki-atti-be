@@ -4,6 +4,7 @@ import com.hankkiatti.domain.application.entity.Application;
 import com.hankkiatti.domain.application.entity.ApplyBlockReason;
 import com.hankkiatti.domain.application.entity.ApplyOutcome;
 import com.hankkiatti.domain.application.repository.ApplicationRepository;
+import com.hankkiatti.domain.application.service.ApplyPolicy;
 import com.hankkiatti.domain.auth.exception.AuthErrorType;
 import com.hankkiatti.domain.auth.exception.AuthException;
 import com.hankkiatti.domain.helper.repository.HelperRepository;
@@ -21,7 +22,6 @@ import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -41,6 +41,7 @@ public class OpenHelpRequestService {
     private final HelpRequestRepository helpRequestRepository;
     private final ApplicationRepository applicationRepository;
     private final HelperRepository helperRepository;
+    private final ApplyPolicy applyPolicy;
     private final Clock clock;
 
     /**
@@ -77,28 +78,11 @@ public class OpenHelpRequestService {
     }
 
     private OpenHelpRequestResponseDto toCard(HelpRequest request, List<Application> myActive) {
-        ApplyBlockReason blockReason = blockReason(request, myActive);
+        ApplyBlockReason blockReason = applyPolicy.blockReason(request, myActive);
         ApplyOutcome outcome = blockReason != null ? ApplyOutcome.BLOCKED
                 : request.getStatus() == HelpRequestStatus.RECRUITING ? ApplyOutcome.MATCH
                 : ApplyOutcome.WAITING;
         return new OpenHelpRequestResponseDto(request.getId(), request.getStartAt(), request.getEndAt(),
                 request.getHelpTypes().stream().sorted().toList(), outcome, blockReason);
-    }
-
-    /**
-     * 지원할 수 없는 이유. 같은 신청에 진행 중인 지원이 있으면 재지원 불가(4.2), 확정 매칭과 이용 시간이 겹치면 차단(4.3).
-     * 예비 지원과 겹치는 건 막지 않는다 — 예비끼리는 여러 건 지원할 수 있다.
-     */
-    private ApplyBlockReason blockReason(HelpRequest request, List<Application> myActive) {
-        Set<Long> appliedRequestIds = myActive.stream()
-                .map(application -> application.getHelpRequest().getId())
-                .collect(Collectors.toSet());
-        if (appliedRequestIds.contains(request.getId())) {
-            return ApplyBlockReason.ALREADY_APPLIED;
-        }
-        boolean overlapsConfirmed = myActive.stream()
-                .filter(application -> application.getStatus().isConfirmed())
-                .anyMatch(application -> application.getHelpRequest().overlaps(request.getStartAt(), request.getEndAt()));
-        return overlapsConfirmed ? ApplyBlockReason.TIME_OVERLAP : null;
     }
 }
