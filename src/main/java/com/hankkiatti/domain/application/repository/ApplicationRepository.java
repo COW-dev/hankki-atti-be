@@ -213,6 +213,26 @@ public interface ApplicationRepository extends JpaRepository<Application, Long> 
     List<Application> findWithHelperByHelpRequestIdIn(@Param("helpRequestIds") Collection<Long> helpRequestIds);
 
     /**
+     * 도우미의 지원 전부 (관리자 도우미 상세 요약 숫자).
+     */
+    List<Application> findByHelperAccountId(Long helperId);
+
+    /**
+     * 도우미들의 이용 완료 건수 (관리자 도우미 목록). 이용 완료가 없는 도우미는 결과에 없다.
+     */
+    default List<HelperApplicationCount> countCompletedByHelper(Collection<Long> helperIds) {
+        return countByHelperIdInAndStatus(helperIds, ApplicationStatus.COMPLETED);
+    }
+
+    @Query("""
+            select new com.hankkiatti.domain.application.repository.HelperApplicationCount(a.helper.accountId, count(a))
+            from Application a
+            where a.helper.accountId in :helperIds and a.status = :status
+            group by a.helper.accountId""")
+    List<HelperApplicationCount> countByHelperIdInAndStatus(@Param("helperIds") Collection<Long> helperIds,
+                                                            @Param("status") ApplicationStatus status);
+
+    /**
      * 도우미의 봉사시간 합계. 봉사시간이 기록된 지원(이용 완료 1.0, 노쇼 0)만 더한다. 하나도 없으면 null.
      */
     @Query("select sum(a.volunteerHours) from Application a where a.helper.accountId = :helperId")

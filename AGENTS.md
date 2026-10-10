@@ -107,7 +107,7 @@ domain/
 ├── sms/          SmsOutbox, 문자 아웃박스 적재·발송(SmsOutboxService, SmsRelay), 발송부 SmsSender(AWS SNS 구현 SnsSmsSender)
 ├── notification/ Notification, NotificationType, NotificationTargetType, 인앱 알림 저장(NotificationService.notify)·목록(커서)·안 읽은 개수·읽음 API, 매칭·취소 이벤트 → 알림 작업 아웃박스(NotificationJob — NotificationJobRecorder가 업무 트랜잭션 안에서 저장 → NotificationJobRelay·Poller가 처리 → NotificationDispatcher, 문구는 `messages/notification.properties` — 키 = 알림 종류, NotificationMessages가 채운다)
 ├── student/      Student, DisabilityType, CredentialMailStatus, 관리자 장애학생 등록(AdminStudentService), 장애학생 상세 3탭 — 정보·매칭현황·취소·노쇼 이력(AdminStudentDetailService, 등급별 프로필 DTO)
-├── helper/       Helper, 도우미 회원가입(HelperSignupService, 공개 경로 `/api/helpers/signup`)
+├── helper/       Helper, 도우미 회원가입(HelperSignupService, 공개 경로 `/api/helpers/signup`), 관리자 도우미 목록·상세·활동 이력(AdminHelperService — 두 등급 같은 응답, 목록 전화번호는 가림)
 ├── admin/        Admin, AdminGrade
 ├── helprequest/  HelpRequest, HelpType, HelpRequestStatus, RequestCancelType, Meal, 신청 가능 날짜·시각(HelpRequestSchedule), 신청·철회·장애학생 매칭 취소·노쇼 신고(HelpRequestService — 매칭 취소는 HelpRequestCanceledByStudentEvent 발행), 관리자 전체 신청 현황·요약(AdminHelpRequestService — 등급별 DTO), 조회 기간 규칙(HelpRequestDateRange), 식사 시작·종료 자동 처리(MealTimeJob)
 └── application/  Application, ApplicationStatus(ACTIVE·CONFIRMED), CancelReason, ApplicationAfterAction, 지원(ApplicationService), 도우미 매칭 취소·예비 빠지기(HelperCancelService), 다음 예비 승격·모집 재개(WaitingPromoter — 취소·승격 거절·응답 마감이 같이 씀), 식사 1시간 이내 승격의 수락·거절·응답 마감 자동 거절(PromotionResponseService), 매칭 현황 조회(MyApplicationService, MyApplicationFilter), 확정 매칭 시 겹치는 다른 예비 자동 제외(HelperConfirmedEvent → OverlappingWaitExcluder), 지원 가능 규칙(ApplyPolicy — 요청 목록 카드·지원 검증·승격 후보 확인이 같이 씀), 지원 결과 예상 ApplyOutcome·ApplyBlockReason(저장 안 함)

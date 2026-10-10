@@ -29,4 +29,15 @@ class PhoneNumbersTest {
         // when & then
         assertThat(PhoneNumbers.toE164(raw)).isEqualTo(expected);
     }
+
+    @ParameterizedTest
+    @CsvSource({
+            "010-1234-5678, 010-****-5678",
+            "011-123-4567, 011-***-4567",
+            "01012345678, ***********"
+    })
+    void mask_가운데자리를가림_형식이다르면전부가림(String stored, String expected) {
+        // when & then
+        assertThat(PhoneNumbers.mask(stored)).isEqualTo(expected);
+    }
 }
