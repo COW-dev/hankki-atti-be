@@ -44,7 +44,8 @@ public class WaitingPromoter {
      */
     public ApplicationAfterAction promoteOrReopen(HelpRequest request, LocalDateTime now) {
         List<Application> waiting = applicationRepository.findWaitingForUpdate(request.getId());
-        for (Application candidate : waiting) {
+        for (int index = 0; index < waiting.size(); index++) {
+            Application candidate = waiting.get(index);
             Long candidateId = candidate.getHelper().getAccountId();
             // 후보가 동시에 겹치는 다른 신청에 지원하는 것과 한 줄로 서도록 도우미 행을 잠근 뒤 확인한다
             helperRepository.findByIdForUpdate(candidateId);
@@ -56,7 +57,8 @@ public class WaitingPromoter {
                 eventPublisher.publishEvent(new WaitingExcludedEvent(candidate.getId()));
                 continue;
             }
-            promote(request, candidate, now);
+            // 승격 당시 순번 = 예비 목록(지원 순)에서의 자리. 앞 예비가 자동 제외됐으면 2번 이상이다
+            promote(request, candidate, now, index + 1);
             return ApplicationAfterAction.PROMOTED;
         }
         request.reopen();
@@ -85,9 +87,9 @@ public class WaitingPromoter {
         return deadline != null && now.isBefore(remindAt) ? remindAt : null;
     }
 
-    private void promote(HelpRequest request, Application candidate, LocalDateTime now) {
+    private void promote(HelpRequest request, Application candidate, LocalDateTime now, int waitingOrder) {
         LocalDateTime deadline = responseDeadline(request.getStartAt(), now);
-        candidate.promote(now, deadline, remindAt(request.getStartAt(), now, deadline));
+        candidate.promote(now, deadline, remindAt(request.getStartAt(), now, deadline), waitingOrder);
         request.changeHelper();
         if (deadline != null) {
             // 겹치는 다른 예비는 수락할 때 제외한다 — 거절하면 그 예비가 그대로 남아야 해서

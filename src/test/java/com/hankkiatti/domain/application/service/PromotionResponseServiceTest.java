@@ -72,7 +72,7 @@ class PromotionResponseServiceTest {
         ReflectionTestUtils.setField(helper, "accountId", HELPER_ID);
         pending = new Application(request, helper, NOON.minusDays(1));
         ReflectionTestUtils.setField(pending, "id", APPLICATION_ID);
-        pending.promote(NOON.minusMinutes(40), DEADLINE, null);
+        pending.promote(NOON.minusMinutes(40), DEADLINE, null, 1);
     }
 
     private PromotionResponseService serviceAt(LocalDateTime now) {

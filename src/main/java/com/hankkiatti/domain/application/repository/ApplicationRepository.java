@@ -207,6 +207,12 @@ public interface ApplicationRepository extends JpaRepository<Application, Long> 
                                           @Param("status") ApplicationStatus status);
 
     /**
+     * 신청들의 지원 전부를 도우미와 함께 (관리자 장애학생 상세 — 매칭현황·취소·노쇼 이력). 한 학생의 신청이라 많지 않다.
+     */
+    @Query("select a from Application a join fetch a.helper where a.helpRequest.id in :helpRequestIds")
+    List<Application> findWithHelperByHelpRequestIdIn(@Param("helpRequestIds") Collection<Long> helpRequestIds);
+
+    /**
      * 도우미의 봉사시간 합계. 봉사시간이 기록된 지원(이용 완료 1.0, 노쇼 0)만 더한다. 하나도 없으면 null.
      */
     @Query("select sum(a.volunteerHours) from Application a where a.helper.accountId = :helperId")

@@ -69,6 +69,9 @@ public class Application extends BaseTimeEntity {
     // 응답 대기 재알림을 보낼 시각(식사 30분 전). 보냈거나 보낼 필요가 없으면 비어 있다
     private LocalDateTime promotionRemindAt;
 
+    // 승격 당시 예비 순번(지원 순, 1부터). 승격되면 예비 목록이 바뀌어 나중에 다시 구할 수 없어 승격할 때 남긴다
+    private Integer promotedWaitingOrder;
+
     private LocalDateTime canceledAt;
 
     private LocalDateTime feedbackPromptedAt;
@@ -99,9 +102,10 @@ public class Application extends BaseTimeEntity {
     }
 
     // 응답 마감이 있으면 응답 대기(식사 1시간 이내 승격), 없으면 바로 매칭 완료
-    public void promote(LocalDateTime now, LocalDateTime responseDeadline, LocalDateTime remindAt) {
+    public void promote(LocalDateTime now, LocalDateTime responseDeadline, LocalDateTime remindAt, int waitingOrder) {
         requireStatus(ApplicationStatus.WAITING);
         this.promotedAt = now;
+        this.promotedWaitingOrder = waitingOrder;
         if (responseDeadline != null) {
             this.status = ApplicationStatus.PROMOTION_PENDING;
             this.promotionDeadline = responseDeadline;

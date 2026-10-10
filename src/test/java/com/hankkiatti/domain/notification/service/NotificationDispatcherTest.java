@@ -161,7 +161,7 @@ class NotificationDispatcherTest {
     @Test
     void process_승격응답재알림_도우미에게마감포함하고메일문자에도마감과재알림여부() {
         // given
-        application.promote(NOON.minusMinutes(40), NOON.minusMinutes(15), NOON.minusMinutes(30));
+        application.promote(NOON.minusMinutes(40), NOON.minusMinutes(15), NOON.minusMinutes(30), 1);
         givenApplication();
 
         // when

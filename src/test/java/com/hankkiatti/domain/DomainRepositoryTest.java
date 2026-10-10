@@ -290,7 +290,7 @@ class DomainRepositoryTest {
         Application matched = new Application(request, helper, NOW);
         matched.match(NOW);
         Application pending = new Application(request, helper, NOW);
-        pending.promote(NOW, NOW.plusMinutes(30), null);
+        pending.promote(NOW, NOW.plusMinutes(30), null, 1);
         Application waiting = new Application(request, helper, NOW);
         Application withdrawn = new Application(request, helper, NOW);
         withdrawn.withdraw(NOW);
