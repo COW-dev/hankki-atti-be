@@ -6,12 +6,12 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.hankkiatti.domain.application.dto.response.ApplyResponseDto;
 import com.hankkiatti.domain.application.entity.Application;
 import com.hankkiatti.domain.application.entity.ApplicationStatus;
 import com.hankkiatti.domain.application.event.HelperConfirmedEvent;
+import com.hankkiatti.domain.application.event.WaitingRegisteredEvent;
 import com.hankkiatti.domain.application.exception.ApplicationErrorType;
 import com.hankkiatti.domain.application.exception.ApplicationException;
 import com.hankkiatti.domain.application.repository.ApplicationRepository;
@@ -134,7 +134,8 @@ class ApplicationServiceTest {
         assertThat(result.student().kakaoId()).isEqualTo(student.getKakaoId());
         assertThat(request.getStatus()).isEqualTo(HelpRequestStatus.MATCHED);
         assertThat(request.getFirstMatchedAt()).isEqualTo(NOW);
-        verify(eventPublisher).publishEvent(new HelperConfirmedEvent(HELPER_ID, REQUEST_ID, NOON, NOON.plusHours(1)));
+        verify(eventPublisher).publishEvent(new HelperConfirmedEvent(HELPER_ID, REQUEST_ID, 31L, NOON, NOON.plusHours(1),
+                HelperConfirmedEvent.Kind.DIRECT_MATCH));
     }
 
     @Test
@@ -153,7 +154,7 @@ class ApplicationServiceTest {
         assertThat(result.status()).isEqualTo(ApplicationStatus.WAITING);
         assertThat(result.waitingOrder()).isEqualTo(2);
         assertThat(result.student()).isNull();
-        verifyNoInteractions(eventPublisher);
+        verify(eventPublisher).publishEvent(new WaitingRegisteredEvent(31L, 2));
     }
 
     @Test

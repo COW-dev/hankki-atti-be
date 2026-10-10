@@ -2,6 +2,7 @@ package com.hankkiatti.domain.application.service;
 
 import com.hankkiatti.domain.application.entity.Application;
 import com.hankkiatti.domain.application.entity.ApplicationStatus;
+import com.hankkiatti.domain.application.event.WaitingExcludedEvent;
 import com.hankkiatti.domain.application.repository.ApplicationRepository;
 import com.hankkiatti.domain.helprequest.entity.HelpRequest;
 import com.hankkiatti.domain.helprequest.repository.HelpRequestRepository;
@@ -10,6 +11,7 @@ import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Propagation;
@@ -27,6 +29,7 @@ public class OverlappingWaitExclusionService {
     private final ApplicationRepository applicationRepository;
     private final HelpRequestRepository helpRequestRepository;
     private final ApplyPolicy applyPolicy;
+    private final ApplicationEventPublisher eventPublisher;
 
     /**
      * 제외 대상 후보: 그 도우미의 예비 중 매칭된 신청과 이용 시간이 겹치는 것. 커밋 뒤라 새 트랜잭션에서 읽는다.
@@ -59,6 +62,7 @@ public class OverlappingWaitExclusionService {
             return false;
         }
         waiting.exclude();
+        eventPublisher.publishEvent(new WaitingExcludedEvent(applicationId));
         log.info("겹치는 예비 자동 제외: applicationId={}, helpRequestId={}, helperId={}",
                 applicationId, request.getId(), helperId);
         return true;

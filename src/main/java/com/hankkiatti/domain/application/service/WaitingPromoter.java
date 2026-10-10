@@ -3,9 +3,12 @@ package com.hankkiatti.domain.application.service;
 import com.hankkiatti.domain.application.entity.Application;
 import com.hankkiatti.domain.application.entity.ApplicationAfterAction;
 import com.hankkiatti.domain.application.event.HelperConfirmedEvent;
+import com.hankkiatti.domain.application.event.PromotionPendingEvent;
+import com.hankkiatti.domain.application.event.WaitingExcludedEvent;
 import com.hankkiatti.domain.application.repository.ApplicationRepository;
 import com.hankkiatti.domain.helper.repository.HelperRepository;
 import com.hankkiatti.domain.helprequest.entity.HelpRequest;
+import com.hankkiatti.domain.helprequest.event.HelpRequestReopenedEvent;
 import java.time.LocalDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +29,8 @@ public class WaitingPromoter {
     private static final long RESPONSE_REQUIRED_HOURS = 1;
     // 응답 마감은 식사 이 시간 전. 그보다 늦게 승격되면 식사 시작까지 기다린다 (2026-10-10 결정)
     private static final long RESPONSE_CUTOFF_MINUTES = 15;
+    // 응답 대기가 식사 이 시간 전까지 남아 있으면 한 번 더 알린다
+    private static final long REMIND_BEFORE_MINUTES = 30;
 
     private final ApplicationRepository applicationRepository;
     private final HelperRepository helperRepository;
@@ -48,12 +53,14 @@ public class WaitingPromoter {
                 candidate.exclude();
                 log.info("승격 후보 자동 제외(시간 겹침): applicationId={}, helpRequestId={}, helperId={}",
                         candidate.getId(), request.getId(), candidateId);
+                eventPublisher.publishEvent(new WaitingExcludedEvent(candidate.getId()));
                 continue;
             }
             promote(request, candidate, now);
             return ApplicationAfterAction.PROMOTED;
         }
         request.reopen();
+        eventPublisher.publishEvent(new HelpRequestReopenedEvent(request.getId()));
         return ApplicationAfterAction.REOPENED;
     }
 
@@ -69,19 +76,29 @@ public class WaitingPromoter {
         return now.isBefore(cutoff) ? cutoff : startAt;
     }
 
+    /**
+     * 응답 대기 재알림 시각. 식사 30분 전보다 일찍 응답 대기로 승격됐을 때만 식사 30분 전에 한 번 더 알린다 —
+     * 그보다 늦게 승격됐으면 방금 받은 첫 알림으로 충분하다.
+     */
+    static LocalDateTime remindAt(LocalDateTime startAt, LocalDateTime now, LocalDateTime deadline) {
+        LocalDateTime remindAt = startAt.minusMinutes(REMIND_BEFORE_MINUTES);
+        return deadline != null && now.isBefore(remindAt) ? remindAt : null;
+    }
+
     private void promote(HelpRequest request, Application candidate, LocalDateTime now) {
         LocalDateTime deadline = responseDeadline(request.getStartAt(), now);
-        candidate.promote(now, deadline);
+        candidate.promote(now, deadline, remindAt(request.getStartAt(), now, deadline));
         request.changeHelper();
         if (deadline != null) {
             // 겹치는 다른 예비는 수락할 때 제외한다 — 거절하면 그 예비가 그대로 남아야 해서
             log.info("예비 승격(응답 대기): applicationId={}, helpRequestId={}, deadline={}",
                     candidate.getId(), request.getId(), deadline);
+            eventPublisher.publishEvent(new PromotionPendingEvent(candidate.getId(), false));
             return;
         }
         log.info("예비 승격: applicationId={}, helpRequestId={}", candidate.getId(), request.getId());
-        // 커밋 뒤 승격된 도우미의 겹치는 다른 예비를 자동 제외한다 (BE-32)
+        // 커밋 뒤 승격된 도우미의 겹치는 다른 예비를 자동 제외하고(BE-32), 도우미 바뀜·승격 알림을 쌓는다(BE-51)
         eventPublisher.publishEvent(new HelperConfirmedEvent(candidate.getHelper().getAccountId(), request.getId(),
-                request.getStartAt(), request.getEndAt()));
+                candidate.getId(), request.getStartAt(), request.getEndAt(), HelperConfirmedEvent.Kind.PROMOTED));
     }
 }

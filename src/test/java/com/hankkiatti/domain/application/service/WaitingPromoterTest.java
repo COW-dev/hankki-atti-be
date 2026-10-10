@@ -11,11 +11,13 @@ import com.hankkiatti.domain.application.entity.Application;
 import com.hankkiatti.domain.application.entity.ApplicationAfterAction;
 import com.hankkiatti.domain.application.entity.ApplicationStatus;
 import com.hankkiatti.domain.application.event.HelperConfirmedEvent;
+import com.hankkiatti.domain.application.event.PromotionPendingEvent;
 import com.hankkiatti.domain.application.repository.ApplicationRepository;
 import com.hankkiatti.domain.helper.entity.Helper;
 import com.hankkiatti.domain.helper.repository.HelperRepository;
 import com.hankkiatti.domain.helprequest.entity.HelpRequest;
 import com.hankkiatti.domain.helprequest.entity.HelpRequestStatus;
+import com.hankkiatti.domain.helprequest.event.HelpRequestReopenedEvent;
 import com.hankkiatti.support.TestAccounts;
 import com.hankkiatti.support.TestHelpRequests;
 import com.hankkiatti.support.TestProfiles;
@@ -93,7 +95,19 @@ class WaitingPromoterTest {
     }
 
     @Test
-    void promoteOrReopen_1시간이내_응답대기로승격하고겹침제외이벤트는보내지않음() {
+    void remindAt_식사30분전보다일찍응답대기로승격_식사30분전() {
+        assertThat(WaitingPromoter.remindAt(NOON, NOON.minusMinutes(40), NOON.minusMinutes(15)))
+                .isEqualTo(NOON.minusMinutes(30));
+    }
+
+    @Test
+    void remindAt_식사30분전이후승격이거나바로매칭_재알림없음() {
+        assertThat(WaitingPromoter.remindAt(NOON, NOON.minusMinutes(30), NOON.minusMinutes(15))).isNull();
+        assertThat(WaitingPromoter.remindAt(NOON, NOON.minusHours(3), null)).isNull();
+    }
+
+    @Test
+    void promoteOrReopen_1시간이내_응답대기로승격하고응답요청이벤트만() {
         // given
         givenCandidateWithNoOtherMatch();
 
@@ -104,8 +118,11 @@ class WaitingPromoterTest {
         assertThat(result).isEqualTo(ApplicationAfterAction.PROMOTED);
         assertThat(waiting.getStatus()).isEqualTo(ApplicationStatus.PROMOTION_PENDING);
         assertThat(waiting.getPromotionDeadline()).isEqualTo(NOON.minusMinutes(15));
+        assertThat(waiting.getPromotionRemindAt()).isEqualTo(NOON.minusMinutes(30));
         assertThat(request.isHelperChanged()).isTrue();
-        verify(eventPublisher, never()).publishEvent(any());
+        // 겹치는 예비 자동 제외(HelperConfirmedEvent)는 수락할 때 — 지금은 응답 요청 알림만
+        verify(eventPublisher).publishEvent(new PromotionPendingEvent(32L, false));
+        verify(eventPublisher, never()).publishEvent(any(HelperConfirmedEvent.class));
     }
 
     @Test
@@ -120,7 +137,8 @@ class WaitingPromoterTest {
         assertThat(result).isEqualTo(ApplicationAfterAction.PROMOTED);
         assertThat(waiting.getStatus()).isEqualTo(ApplicationStatus.MATCHED);
         assertThat(waiting.getPromotionDeadline()).isNull();
-        verify(eventPublisher).publishEvent(new HelperConfirmedEvent(8L, REQUEST_ID, NOON, NOON.plusHours(1)));
+        verify(eventPublisher).publishEvent(new HelperConfirmedEvent(8L, REQUEST_ID, 32L, NOON, NOON.plusHours(1),
+                HelperConfirmedEvent.Kind.PROMOTED));
     }
 
     @Test
@@ -134,5 +152,6 @@ class WaitingPromoterTest {
         // then
         assertThat(result).isEqualTo(ApplicationAfterAction.REOPENED);
         assertThat(request.getStatus()).isEqualTo(HelpRequestStatus.RECRUITING);
+        verify(eventPublisher).publishEvent(new HelpRequestReopenedEvent(REQUEST_ID));
     }
 }

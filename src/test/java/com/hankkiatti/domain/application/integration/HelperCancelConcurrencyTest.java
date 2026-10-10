@@ -19,6 +19,7 @@ import com.hankkiatti.domain.helprequest.entity.HelpRequest;
 import com.hankkiatti.domain.helprequest.entity.HelpRequestStatus;
 import com.hankkiatti.domain.helprequest.entity.HelpType;
 import com.hankkiatti.domain.helprequest.repository.HelpRequestRepository;
+import com.hankkiatti.domain.notification.repository.NotificationRepository;
 import com.hankkiatti.domain.student.entity.Student;
 import com.hankkiatti.domain.student.repository.StudentRepository;
 import com.hankkiatti.support.TestProfiles;
@@ -71,6 +72,9 @@ class HelperCancelConcurrencyTest {
     private ApplicationRepository applicationRepository;
 
     @Autowired
+    private NotificationRepository notificationRepository;
+
+    @Autowired
     private Clock clock;
 
     private final List<Long> accountIds = new ArrayList<>();
@@ -94,6 +98,8 @@ class HelperCancelConcurrencyTest {
 
     @AfterEach
     void tearDown() {
+        // 커밋된 지원·취소가 알림을 쌓으므로 계정보다 먼저 지운다
+        notificationRepository.deleteAll();
         applicationRepository.deleteAll();
         helpRequestRepository.deleteAll();
         helperIds.forEach(helperRepository::deleteById);

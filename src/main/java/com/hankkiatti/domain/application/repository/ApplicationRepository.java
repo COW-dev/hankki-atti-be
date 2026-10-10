@@ -147,6 +147,21 @@ public interface ApplicationRepository extends JpaRepository<Application, Long> 
             @Param("status") ApplicationStatus status);
 
     /**
+     * 재알림 시각(식사 30분 전)이 된 승격 응답 대기의 ID. 보내고 나면 재알림 시각이 비어 다시 나오지 않는다.
+     */
+    default List<Long> findIdsToRemindPromotion(LocalDateTime now, int limit) {
+        return findIdsByStatusAndRemindAtPassed(ApplicationStatus.PROMOTION_PENDING, now, PageRequest.of(0, limit));
+    }
+
+    @Query("""
+            select a.id from Application a
+            where a.status = :status and a.promotionRemindAt <= :now
+            order by a.promotionRemindAt, a.id""")
+    List<Long> findIdsByStatusAndRemindAtPassed(@Param("status") ApplicationStatus status,
+                                                @Param("now") LocalDateTime now,
+                                                Pageable pageable);
+
+    /**
      * 응답 마감이 지난 승격 응답 대기의 ID (자동 거절 대상). 마감이 식사 시작인 것은 식사 시작 처리가 맡아 넣지 않는다.
      */
     default List<Long> findIdsPromotionExpired(LocalDateTime now, int limit) {

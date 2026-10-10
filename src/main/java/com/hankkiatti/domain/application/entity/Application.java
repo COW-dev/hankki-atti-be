@@ -66,6 +66,9 @@ public class Application extends BaseTimeEntity {
     // 식사 1시간 이내 승격의 응답 마감. 응답 대기로 승격됐을 때만 있다
     private LocalDateTime promotionDeadline;
 
+    // 응답 대기 재알림을 보낼 시각(식사 30분 전). 보냈거나 보낼 필요가 없으면 비어 있다
+    private LocalDateTime promotionRemindAt;
+
     private LocalDateTime canceledAt;
 
     private LocalDateTime feedbackPromptedAt;
@@ -96,16 +99,23 @@ public class Application extends BaseTimeEntity {
     }
 
     // 응답 마감이 있으면 응답 대기(식사 1시간 이내 승격), 없으면 바로 매칭 완료
-    public void promote(LocalDateTime now, LocalDateTime responseDeadline) {
+    public void promote(LocalDateTime now, LocalDateTime responseDeadline, LocalDateTime remindAt) {
         requireStatus(ApplicationStatus.WAITING);
         this.promotedAt = now;
         if (responseDeadline != null) {
             this.status = ApplicationStatus.PROMOTION_PENDING;
             this.promotionDeadline = responseDeadline;
+            this.promotionRemindAt = remindAt;
             return;
         }
         this.status = ApplicationStatus.MATCHED;
         this.matchedAt = now;
+    }
+
+    // 재알림을 보냈다. 다시 보내지 않게 비운다
+    public void markPromotionReminded() {
+        requireStatus(ApplicationStatus.PROMOTION_PENDING);
+        this.promotionRemindAt = null;
     }
 
     public void acceptPromotion(LocalDateTime now) {
