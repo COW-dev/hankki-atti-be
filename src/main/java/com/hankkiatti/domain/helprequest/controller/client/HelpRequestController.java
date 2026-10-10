@@ -77,6 +77,14 @@ public class HelpRequestController implements HelpRequestControllerDocs {
     }
 
     @Override
+    @PostMapping("/{helpRequestId}/cancel")
+    public ResponseEntity<ApiResult<MyHelpRequestResponseDto>> cancelMatched(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @PathVariable Long helpRequestId) {
+        return ApiResponse.of(SuccessType.SUCCESS, helpRequestService.cancelMatched(principal.accountId(), helpRequestId));
+    }
+
+    @Override
     @PostMapping("/{helpRequestId}/no-show")
     public ResponseEntity<ApiResult<MyHelpRequestResponseDto>> reportNoShow(
             @AuthenticationPrincipal AuthPrincipal principal,

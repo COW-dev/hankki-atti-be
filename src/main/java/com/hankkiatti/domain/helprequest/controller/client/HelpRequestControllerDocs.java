@@ -80,6 +80,19 @@ public interface HelpRequestControllerDocs {
     ResponseEntity<ApiResult<MyHelpRequestResponseDto>> withdraw(@Parameter(hidden = true) AuthPrincipal principal,
                                                                 @Parameter(description = "신청 ID") Long helpRequestId);
 
+    @Operation(summary = "매칭 취소 (장애학생)", description = """
+            매칭 완료된 내 신청을 바로 취소한다. 사유를 받지 않고 패널티도 없다. 신청은 취소(CANCELED, cancelType STUDENT_CANCEL)가 되고,
+            매칭·승격 응답 대기·예비 도우미의 지원은 모두 학생 사정 취소(STUDENT_CANCELED)가 된다. 도우미들에게는 알림이 간다.
+            모집 중인 신청은 신청 철회(/withdraw)로 한다. 식사가 시작된 뒤에는 취소할 수 없다 — 도우미가 오지 않았으면 노쇼 신고를 한다.
+            응답은 취소된 신청이고 내 신청 조회의 항목과 같은 모양이다.""")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "취소 완료 (status: CANCELED)")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "로그인 필요")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "도우미 계정이거나 비밀번호 변경 필요")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "HELP_REQUEST_NOT_FOUND — 없는 신청이거나 내 신청이 아님")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "HELP_REQUEST_INVALID_STATUS — 매칭 완료가 아님(모집 중이면 철회로, 이미 취소 등) 또는 식사가 시작됨")
+    ResponseEntity<ApiResult<MyHelpRequestResponseDto>> cancelMatched(@Parameter(hidden = true) AuthPrincipal principal,
+                                                                     @Parameter(description = "신청 ID") Long helpRequestId);
+
     @Operation(summary = "노쇼 신고", description = """
             이용 완료 후 24시간(정각 포함)까지 "도우미가 오지 않았어요"를 신고한다. 신청과 도우미 지원이 모두 노쇼가 되고 도우미 봉사시간은 0이 된다.
             센터 승인 없이 바로 바뀌고, 센터는 취소·노쇼 이력을 보고 사후에 판단한다.
