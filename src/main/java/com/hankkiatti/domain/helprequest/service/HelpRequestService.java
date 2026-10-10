@@ -13,6 +13,7 @@ import com.hankkiatti.domain.helprequest.dto.response.MyHelpRequestResponseDto;
 import com.hankkiatti.domain.helprequest.dto.response.MyHelpRequestsResponseDto;
 import com.hankkiatti.domain.helprequest.entity.HelpRequest;
 import com.hankkiatti.domain.helprequest.entity.HelpType;
+import com.hankkiatti.domain.helprequest.event.HelpRequestCanceledByStudentEvent;
 import com.hankkiatti.domain.helprequest.exception.HelpRequestErrorType;
 import com.hankkiatti.domain.helprequest.exception.HelpRequestException;
 import com.hankkiatti.domain.helprequest.repository.HelpRequestRepository;
@@ -26,6 +27,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -42,6 +44,7 @@ public class HelpRequestService {
     private final StudentRepository studentRepository;
     private final ApplicationRepository applicationRepository;
     private final HelpRequestSchedule helpRequestSchedule;
+    private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
 
     /**
@@ -139,6 +142,29 @@ public class HelpRequestService {
         log.info("노쇼 신고: helpRequestId={}, studentId={}", helpRequestId, accountId);
         Helper helper = completed.isEmpty() ? null : completed.get(0).getHelper();
         return toMyRequest(request, helper, now);
+    }
+
+    /**
+     * 매칭된 신청을 바로 취소한다 (기능명세서 "매칭 취소" — 장애학생, 사유·패널티 없음). 매칭·승격 응답 대기·예비 도우미의 지원은
+     * 모두 학생 사정 취소가 되고, 도우미들에게 알림을 보낼 수 있게 이벤트를 발행한다. 식사가 시작된 뒤에는 막는다.
+     * 락 순서: 신청 → 지원. 도우미 취소·지원·승격 응답과 신청 행에서 한 줄로 선다.
+     */
+    @Transactional
+    public MyHelpRequestResponseDto cancelMatched(Long accountId, Long helpRequestId) {
+        HelpRequest request = findMyRequestForUpdate(accountId, helpRequestId);
+
+        LocalDateTime now = LocalDateTime.now(clock);
+        request.cancelByStudent(now);
+        List<Application> active = applicationRepository.findActiveForUpdate(helpRequestId);
+        active.forEach(Application::cancelByStudent);
+
+        List<Long> helperIds = active.stream().map(application -> application.getHelper().getAccountId()).toList();
+        eventPublisher.publishEvent(
+                new HelpRequestCanceledByStudentEvent(helpRequestId, request.getStartAt(), helperIds));
+        log.info("장애학생 매칭 취소: helpRequestId={}, studentId={}, 학생 취소된 지원={}건",
+                helpRequestId, accountId, active.size());
+        // 취소된 신청이라 도우미 정보는 넣지 않는다
+        return toMyRequest(request, null, now);
     }
 
     // 장애학생 본인의 신청을 신청 행 락으로 가져온다. 없는 신청과 남의 신청은 같은 404로 응답한다

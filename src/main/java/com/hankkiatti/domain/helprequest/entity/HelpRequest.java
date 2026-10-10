@@ -153,6 +153,10 @@ public class HelpRequest extends BaseTimeEntity {
 
     public void cancelByStudent(LocalDateTime now) {
         requireStatus(HelpRequestStatus.MATCHED);
+        // 식사가 시작된 뒤에는 막는다. 도우미가 오지 않았으면 노쇼 신고로 한다 — 와 있는 도우미의 봉사시간이 사라지지 않게 (2026-10-10 결정)
+        if (!now.isBefore(startAt)) {
+            throw new HelpRequestException(HelpRequestErrorType.INVALID_STATUS, "식사 시작 후 학생 취소, helpRequestId=" + id);
+        }
         cancel(RequestCancelType.STUDENT_CANCEL, now);
     }
 
