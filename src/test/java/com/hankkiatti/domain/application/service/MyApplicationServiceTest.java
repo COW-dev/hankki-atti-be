@@ -90,7 +90,7 @@ class MyApplicationServiceTest {
         Application tomorrow = matched(request(NOW.plusDays(1)));
         Application later = waiting(request(NOW.plusDays(3)), me);
         Application pending = waiting(request(NOW.plusDays(2)), me);
-        pending.promote(NOW, NOW.plusMinutes(30), null);
+        pending.promote(NOW, NOW.plusMinutes(30), null, 1);
         Application lastWeek = matched(request(NOW.minusDays(7)));
         lastWeek.complete();
         Application yesterday = waiting(request(NOW.minusDays(1)), me);
@@ -112,7 +112,7 @@ class MyApplicationServiceTest {
         Application matchedCard = matched(request(NOW.plusDays(1)));
         Application waitingCard = waiting(request(NOW.plusDays(2)), me);
         Application pending = waiting(request(NOW.plusDays(3)), me);
-        pending.promote(NOW, NOW.plusMinutes(30), null);
+        pending.promote(NOW, NOW.plusMinutes(30), null, 1);
         Application completed = matched(request(NOW.minusDays(1)));
         completed.complete();
         givenMine(matchedCard, waitingCard, pending, completed);
@@ -182,7 +182,7 @@ class MyApplicationServiceTest {
         Application withdrawn = waiting(request(NOW.minusDays(1)), me);
         withdrawn.withdraw(NOW.minusDays(2));
         Application declined = waiting(request(NOW.minusDays(2)), me);
-        declined.promote(NOW.minusDays(3), NOW.minusDays(3).plusMinutes(30), null);
+        declined.promote(NOW.minusDays(3), NOW.minusDays(3).plusMinutes(30), null, 1);
         declined.declinePromotion(NOW.minusDays(3));
         Application excluded = waiting(request(NOW.minusDays(3)), me);
         excluded.exclude();
@@ -221,7 +221,7 @@ class MyApplicationServiceTest {
         Application matchedCard = matched(request(NOW.plusDays(1)));
         Application waitingCard = waiting(request(NOW.plusDays(2)), me);
         Application pending = waiting(request(NOW.plusDays(3)), me);
-        pending.promote(NOW, NOW.plusMinutes(30), null);
+        pending.promote(NOW, NOW.plusMinutes(30), null, 1);
         Application expired = waiting(request(NOW.minusDays(1)), me);
         expired.expire();
         givenMine(matchedCard, waitingCard, pending, expired);

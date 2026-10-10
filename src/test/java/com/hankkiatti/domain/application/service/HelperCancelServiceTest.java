@@ -150,6 +150,7 @@ class HelperCancelServiceTest {
         assertThat(mine.getAfterAction()).isEqualTo(ApplicationAfterAction.PROMOTED);
         assertThat(waitingFirst.getStatus()).isEqualTo(ApplicationStatus.MATCHED);
         assertThat(waitingFirst.getPromotedAt()).isEqualTo(NOW);
+        assertThat(waitingFirst.getPromotedWaitingOrder()).isEqualTo(1);
         assertThat(waitingSecond.getStatus()).isEqualTo(ApplicationStatus.WAITING);
         assertThat(request.getStatus()).isEqualTo(HelpRequestStatus.MATCHED);
         assertThat(request.isHelperChanged()).isTrue();
@@ -192,6 +193,8 @@ class HelperCancelServiceTest {
         // then
         assertThat(waitingFirst.getStatus()).isEqualTo(ApplicationStatus.EXCLUDED);
         assertThat(waitingSecond.getStatus()).isEqualTo(ApplicationStatus.MATCHED);
+        // 앞 예비가 자동 제외돼 승격 당시 순번은 2번
+        assertThat(waitingSecond.getPromotedWaitingOrder()).isEqualTo(2);
         assertThat(mine.getAfterAction()).isEqualTo(ApplicationAfterAction.PROMOTED);
     }
 
@@ -315,7 +318,7 @@ class HelperCancelServiceTest {
     void leave_그사이승격돼응답대기_INVALID_STATUS() {
         // given
         Application waiting = givenMyWaitingLocked();
-        waiting.promote(NOW, NOON.minusMinutes(15), null);
+        waiting.promote(NOW, NOON.minusMinutes(15), null, 1);
 
         // when & then
         assertApplicationError(() -> helperCancelService.leave(7L, 51L), ApplicationErrorType.INVALID_STATUS);

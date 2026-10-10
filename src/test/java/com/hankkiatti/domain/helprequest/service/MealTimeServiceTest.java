@@ -109,7 +109,7 @@ class MealTimeServiceTest {
         HelpRequest request = request(1L);
         request.match(LUNCH.minusHours(3));
         Application pending = waiting(request);
-        pending.promote(LUNCH.minusMinutes(10), LUNCH, null);
+        pending.promote(LUNCH.minusMinutes(10), LUNCH, null, 1);
         Application stillWaiting = waiting(request);
         given(helpRequestRepository.findByIdForUpdate(1L)).willReturn(Optional.of(request));
         givenApplications(1L, List.of(pending), List.of(stillWaiting));

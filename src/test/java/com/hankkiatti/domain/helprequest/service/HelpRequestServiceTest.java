@@ -444,7 +444,7 @@ class HelpRequestServiceTest {
         HelpRequest request = myMatchedRequest(NOON);
         Application matched = matchedApplication(31L, request, helperWithId(7L, "60230001"));
         Application pending = new Application(request, helperWithId(8L, "60230002"), NOON.minusDays(1));
-        pending.promote(NOON.minusMinutes(40), NOON.minusMinutes(15), null);
+        pending.promote(NOON.minusMinutes(40), NOON.minusMinutes(15), null, 1);
         Application waiting = new Application(request, helperWithId(9L, "60230003"), NOON.minusDays(1));
         ReflectionTestUtils.setField(pending, "id", 32L);
         ReflectionTestUtils.setField(waiting, "id", 33L);

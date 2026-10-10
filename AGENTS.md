@@ -106,7 +106,7 @@ domain/
 ├── mail/         MailOutbox, 메일 아웃박스 적재·발송(MailOutboxService, MailRelay)
 ├── sms/          SmsOutbox, 문자 아웃박스 적재·발송(SmsOutboxService, SmsRelay), 발송부 SmsSender(AWS SNS 구현 SnsSmsSender)
 ├── notification/ Notification, NotificationType, NotificationTargetType, 인앱 알림 저장(NotificationService.notify)·목록(커서)·안 읽은 개수·읽음 API, 매칭·취소 이벤트 → 알림 작업 아웃박스(NotificationJob — NotificationJobRecorder가 업무 트랜잭션 안에서 저장 → NotificationJobRelay·Poller가 처리 → NotificationDispatcher, 문구는 `messages/notification.properties` — 키 = 알림 종류, NotificationMessages가 채운다)
-├── student/      Student, DisabilityType, CredentialMailStatus
+├── student/      Student, DisabilityType, CredentialMailStatus, 관리자 장애학생 등록(AdminStudentService), 장애학생 상세 3탭 — 정보·매칭현황·취소·노쇼 이력(AdminStudentDetailService, 등급별 프로필 DTO)
 ├── helper/       Helper, 도우미 회원가입(HelperSignupService, 공개 경로 `/api/helpers/signup`)
 ├── admin/        Admin, AdminGrade
 ├── helprequest/  HelpRequest, HelpType, HelpRequestStatus, RequestCancelType, Meal, 신청 가능 날짜·시각(HelpRequestSchedule), 신청·철회·장애학생 매칭 취소·노쇼 신고(HelpRequestService — 매칭 취소는 HelpRequestCanceledByStudentEvent 발행), 식사 시작·종료 자동 처리(MealTimeJob)
