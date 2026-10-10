@@ -2,27 +2,35 @@ package com.hankkiatti.domain.student.service;
 
 import com.hankkiatti.domain.account.entity.Account;
 import com.hankkiatti.domain.account.entity.AccountRole;
+import com.hankkiatti.domain.account.entity.AccountStatus;
 import com.hankkiatti.domain.account.repository.AccountRepository;
 import com.hankkiatti.domain.admin.entity.Admin;
 import com.hankkiatti.domain.admin.repository.AdminRepository;
 import com.hankkiatti.domain.auth.exception.AuthErrorType;
 import com.hankkiatti.domain.auth.exception.AuthException;
 import com.hankkiatti.domain.common.PhoneNumbers;
+import com.hankkiatti.domain.helprequest.repository.HelpRequestRepository;
 import com.hankkiatti.domain.mail.entity.MailType;
 import com.hankkiatti.domain.mail.service.MailOutboxService;
 import com.hankkiatti.domain.student.dto.request.AdminStudentCreateRequestDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentCreateResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentCredentialMailResponseDto;
+import com.hankkiatti.domain.student.dto.response.AdminStudentSummaryResponseDto;
 import com.hankkiatti.domain.student.entity.CredentialMailStatus;
+import com.hankkiatti.domain.student.entity.DisabilityType;
 import com.hankkiatti.domain.student.entity.Student;
 import com.hankkiatti.domain.student.exception.StudentErrorType;
 import com.hankkiatti.domain.student.exception.StudentException;
 import com.hankkiatti.domain.student.repository.StudentRepository;
+import com.hankkiatti.domain.student.repository.StudentRecentRequestProjection;
 import java.security.SecureRandom;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -47,8 +55,25 @@ public class AdminStudentService {
     private final AdminRepository adminRepository;
     private final AccountRepository accountRepository;
     private final StudentRepository studentRepository;
+    private final HelpRequestRepository helpRequestRepository;
     private final MailOutboxService mailOutboxService;
     private final PasswordEncoder passwordEncoder;
+
+    @Transactional(readOnly = true)
+    public List<AdminStudentSummaryResponseDto> getStudents(Long adminAccountId, String keyword,
+                                                            DisabilityType disabilityType, AccountStatus status) {
+        Admin admin = requireAdmin(adminAccountId);
+        if (!admin.isFull() && disabilityType != null) {
+            throw new AuthException(AuthErrorType.ACCESS_DENIED,
+                    "제한 권한의 장애 유형 필터 요청, adminAccountId=" + adminAccountId);
+        }
+
+        List<Student> students = studentRepository.search(trimToNull(keyword), disabilityType, status);
+        Map<Long, LocalDateTime> recentRequestAt = recentRequestAt(students);
+        return students.stream()
+                .map(student -> toSummary(student, recentRequestAt.get(student.getAccountId()), admin.isFull()))
+                .toList();
+    }
 
     @Transactional
     public AdminStudentCreateResponseDto create(Long adminAccountId, AdminStudentCreateRequestDto request) {
@@ -132,12 +157,67 @@ public class AdminStudentService {
     }
 
     private void requireFullAdmin(Long adminAccountId) {
-        Admin admin = adminRepository.findById(adminAccountId)
-                .orElseThrow(() -> new AuthException(AuthErrorType.ACCESS_DENIED, "adminAccountId=" + adminAccountId));
+        Admin admin = requireAdmin(adminAccountId);
         if (!admin.isFull()) {
             throw new AuthException(AuthErrorType.ACCESS_DENIED,
                     "adminAccountId=" + adminAccountId + ", grade=" + admin.getGrade());
         }
+    }
+
+    private Admin requireAdmin(Long adminAccountId) {
+        return adminRepository.findById(adminAccountId)
+                .orElseThrow(() -> new AuthException(AuthErrorType.ACCESS_DENIED,
+                        "adminAccountId=" + adminAccountId));
+    }
+
+    private Map<Long, LocalDateTime> recentRequestAt(List<Student> students) {
+        if (students.isEmpty()) {
+            return Map.of();
+        }
+        return helpRequestRepository.findRecentRequestAtByStudentIds(
+                        students.stream().map(Student::getAccountId).toList()).stream()
+                .collect(Collectors.toMap(StudentRecentRequestProjection::getStudentAccountId,
+                        StudentRecentRequestProjection::getRecentRequestAt));
+    }
+
+    private AdminStudentSummaryResponseDto toSummary(Student student, LocalDateTime recentRequestAt,
+                                                      boolean fullAdmin) {
+        Account account = student.getAccount();
+        return new AdminStudentSummaryResponseDto(
+                student.getAccountId(),
+                student.getName(),
+                student.getStudentNo(),
+                fullAdmin ? student.getDisabilityType() : null,
+                fullAdmin ? maskEmail(student.getSchoolEmail()) : null,
+                fullAdmin ? maskPhone(student.getPhone()) : null,
+                fullAdmin ? maskIdentifier(student.getKakaoId()) : null,
+                account.getStatus(),
+                recentRequestAt);
+    }
+
+    private static String maskEmail(String email) {
+        int separator = email.indexOf('@');
+        if (separator <= 0) {
+            return maskIdentifier(email);
+        }
+        return maskIdentifier(email.substring(0, separator)) + email.substring(separator);
+    }
+
+    private static String maskPhone(String phone) {
+        int firstSeparator = phone.indexOf('-');
+        int lastSeparator = phone.lastIndexOf('-');
+        if (firstSeparator < 0 || firstSeparator == lastSeparator) {
+            return maskIdentifier(phone);
+        }
+        return phone.substring(0, firstSeparator + 1)
+                + "*".repeat(lastSeparator - firstSeparator - 1)
+                + phone.substring(lastSeparator);
+    }
+
+    private static String maskIdentifier(String value) {
+        int visibleLength = Math.min(2, value.length());
+        int maskedLength = Math.max(3, value.length() - visibleLength);
+        return value.substring(0, visibleLength) + "*".repeat(maskedLength);
     }
 
     private String credentialMailBody(String loginId, String temporaryPassword) {

@@ -6,28 +6,35 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import com.hankkiatti.domain.account.entity.Account;
 import com.hankkiatti.domain.account.entity.AccountRole;
+import com.hankkiatti.domain.account.entity.AccountStatus;
 import com.hankkiatti.domain.account.repository.AccountRepository;
 import com.hankkiatti.domain.admin.entity.Admin;
 import com.hankkiatti.domain.admin.entity.AdminGrade;
 import com.hankkiatti.domain.admin.repository.AdminRepository;
 import com.hankkiatti.domain.auth.exception.AuthErrorType;
 import com.hankkiatti.domain.auth.exception.AuthException;
+import com.hankkiatti.domain.helprequest.repository.HelpRequestRepository;
 import com.hankkiatti.domain.mail.entity.MailType;
 import com.hankkiatti.domain.mail.service.MailOutboxService;
 import com.hankkiatti.domain.student.dto.request.AdminStudentCreateRequestDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentCreateResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentCredentialMailResponseDto;
+import com.hankkiatti.domain.student.dto.response.AdminStudentSummaryResponseDto;
 import com.hankkiatti.domain.student.entity.CredentialMailStatus;
 import com.hankkiatti.domain.student.entity.DisabilityType;
 import com.hankkiatti.domain.student.entity.Student;
 import com.hankkiatti.domain.student.exception.StudentErrorType;
 import com.hankkiatti.domain.student.exception.StudentException;
 import com.hankkiatti.domain.student.repository.StudentRepository;
+import com.hankkiatti.domain.student.repository.StudentRecentRequestProjection;
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -54,6 +61,9 @@ class AdminStudentServiceTest {
     private StudentRepository studentRepository;
 
     @Mock
+    private HelpRequestRepository helpRequestRepository;
+
+    @Mock
     private MailOutboxService mailOutboxService;
 
     @Mock
@@ -64,7 +74,8 @@ class AdminStudentServiceTest {
     @BeforeEach
     void setUp() {
         adminStudentService = new AdminStudentService(
-                adminRepository, accountRepository, studentRepository, mailOutboxService, passwordEncoder);
+                adminRepository, accountRepository, studentRepository, helpRequestRepository,
+                mailOutboxService, passwordEncoder);
     }
 
     private AdminStudentCreateRequestDto request() {
@@ -116,6 +127,87 @@ class AdminStudentServiceTest {
         ReflectionTestUtils.setField(student, "accountId", account.getId());
         student.markCredentialMailFailed();
         return student;
+    }
+
+    private Student student(Account account) {
+        Student student = new Student(
+                account,
+                "김한끼",
+                account.getLoginId(),
+                "010-1234-5678",
+                "hankki_student",
+                "student@mju.ac.kr",
+                DisabilityType.PHYSICAL,
+                "식판 이동 도움");
+        ReflectionTestUtils.setField(student, "accountId", account.getId());
+        return student;
+    }
+
+    @Test
+    void getStudents_전체권한관리자_민감정보를가려서최근신청과함께조회한다() {
+        // given
+        givenFullAdmin();
+        Account account = studentAccount(10L);
+        Student student = student(account);
+        LocalDateTime recentRequestAt = LocalDateTime.of(2026, 10, 12, 12, 0);
+        StudentRecentRequestProjection projection = mock(StudentRecentRequestProjection.class);
+        given(projection.getStudentAccountId()).willReturn(10L);
+        given(projection.getRecentRequestAt()).willReturn(recentRequestAt);
+        given(studentRepository.search("김", DisabilityType.PHYSICAL, AccountStatus.ACTIVE))
+                .willReturn(List.of(student));
+        given(helpRequestRepository.findRecentRequestAtByStudentIds(List.of(10L)))
+                .willReturn(List.of(projection));
+
+        // when
+        List<AdminStudentSummaryResponseDto> result = adminStudentService.getStudents(
+                ADMIN_ID, " 김 ", DisabilityType.PHYSICAL, AccountStatus.ACTIVE);
+
+        // then
+        assertThat(result).singleElement().satisfies(item -> {
+            assertThat(item.accountId()).isEqualTo(10L);
+            assertThat(item.name()).isEqualTo("김한끼");
+            assertThat(item.disabilityType()).isEqualTo(DisabilityType.PHYSICAL);
+            assertThat(item.schoolEmail()).isEqualTo("st*****@mju.ac.kr");
+            assertThat(item.phone()).isEqualTo("010-****-5678");
+            assertThat(item.kakaoId()).isEqualTo("ha************");
+            assertThat(item.status()).isEqualTo(AccountStatus.ACTIVE);
+            assertThat(item.recentRequestAt()).isEqualTo(recentRequestAt);
+        });
+    }
+
+    @Test
+    void getStudents_제한권한관리자_민감정보없이조회한다() {
+        // given
+        given(adminRepository.findById(ADMIN_ID)).willReturn(Optional.of(admin(AdminGrade.LIMITED)));
+        Student student = student(studentAccount(10L));
+        given(studentRepository.search(null, null, null)).willReturn(List.of(student));
+        given(helpRequestRepository.findRecentRequestAtByStudentIds(List.of(10L))).willReturn(List.of());
+
+        // when
+        AdminStudentSummaryResponseDto result = adminStudentService.getStudents(ADMIN_ID, null, null, null).get(0);
+
+        // then
+        assertThat(result.name()).isEqualTo("김한끼");
+        assertThat(result.studentNo()).isEqualTo("60261234");
+        assertThat(result.status()).isEqualTo(AccountStatus.ACTIVE);
+        assertThat(result.recentRequestAt()).isNull();
+        assertThat(result.disabilityType()).isNull();
+        assertThat(result.schoolEmail()).isNull();
+        assertThat(result.phone()).isNull();
+        assertThat(result.kakaoId()).isNull();
+    }
+
+    @Test
+    void getStudents_제한권한관리자의장애유형필터_ACCESS_DENIED() {
+        // given
+        given(adminRepository.findById(ADMIN_ID)).willReturn(Optional.of(admin(AdminGrade.LIMITED)));
+
+        // when & then
+        assertThatThrownBy(() -> adminStudentService.getStudents(
+                ADMIN_ID, null, DisabilityType.VISUAL, null))
+                .isInstanceOf(AuthException.class)
+                .extracting("errorCode").isEqualTo(AuthErrorType.ACCESS_DENIED);
+        verify(studentRepository, never()).search(any(), any(), any());
     }
 
     @Test
