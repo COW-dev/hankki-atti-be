@@ -2,10 +2,13 @@ package com.hankkiatti.domain.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.hankkiatti.domain.account.entity.AccountRole;
 import com.hankkiatti.domain.application.entity.Application;
 import com.hankkiatti.domain.application.entity.ApplicationStatus;
+import com.hankkiatti.domain.application.event.WaitingExcludedEvent;
 import com.hankkiatti.domain.application.repository.ApplicationRepository;
 import com.hankkiatti.domain.helper.entity.Helper;
 import com.hankkiatti.domain.helprequest.entity.HelpRequest;
@@ -22,6 +25,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
@@ -37,6 +41,9 @@ class OverlappingWaitExclusionServiceTest {
     @Mock
     private HelpRequestRepository helpRequestRepository;
 
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
+
     private OverlappingWaitExclusionService exclusionService;
 
     private final Student student = TestHelpRequests.student("60231234");
@@ -48,7 +55,7 @@ class OverlappingWaitExclusionServiceTest {
     @BeforeEach
     void setUp() {
         exclusionService = new OverlappingWaitExclusionService(applicationRepository, helpRequestRepository,
-                new ApplyPolicy());
+                new ApplyPolicy(), eventPublisher);
         waitingOn = request(10L, NOON.plusMinutes(30));
         waiting = new Application(waitingOn, helper, NOON.minusDays(1));
         ReflectionTestUtils.setField(waiting, "id", WAITING_ID);
@@ -82,6 +89,7 @@ class OverlappingWaitExclusionServiceTest {
         // when & then
         assertThat(exclusionService.excludeOne(WAITING_ID, HELPER_ID)).isTrue();
         assertThat(waiting.getStatus()).isEqualTo(ApplicationStatus.EXCLUDED);
+        verify(eventPublisher).publishEvent(new WaitingExcludedEvent(WAITING_ID));
     }
 
     @Test
@@ -93,6 +101,7 @@ class OverlappingWaitExclusionServiceTest {
         // when & then
         assertThat(exclusionService.excludeOne(WAITING_ID, HELPER_ID)).isFalse();
         assertThat(waiting.getStatus()).isEqualTo(ApplicationStatus.WAITING);
+        verifyNoInteractions(eventPublisher);
     }
 
     @Test

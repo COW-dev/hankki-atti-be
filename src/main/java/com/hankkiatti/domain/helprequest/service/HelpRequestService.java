@@ -158,9 +158,9 @@ public class HelpRequestService {
         List<Application> active = applicationRepository.findActiveForUpdate(helpRequestId);
         active.forEach(Application::cancelByStudent);
 
-        List<Long> helperIds = active.stream().map(application -> application.getHelper().getAccountId()).toList();
+        List<Long> applicationIds = active.stream().map(Application::getId).toList();
         eventPublisher.publishEvent(
-                new HelpRequestCanceledByStudentEvent(helpRequestId, request.getStartAt(), helperIds));
+                new HelpRequestCanceledByStudentEvent(helpRequestId, request.getStartAt(), applicationIds));
         log.info("장애학생 매칭 취소: helpRequestId={}, studentId={}, 학생 취소된 지원={}건",
                 helpRequestId, accountId, active.size());
         // 취소된 신청이라 도우미 정보는 넣지 않는다

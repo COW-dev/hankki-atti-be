@@ -22,6 +22,7 @@ import com.hankkiatti.domain.helper.entity.Helper;
 import com.hankkiatti.domain.helper.repository.HelperRepository;
 import com.hankkiatti.domain.helprequest.entity.HelpRequest;
 import com.hankkiatti.domain.helprequest.entity.HelpRequestStatus;
+import com.hankkiatti.domain.helprequest.event.HelpRequestReopenedEvent;
 import com.hankkiatti.domain.helprequest.repository.HelpRequestRepository;
 import com.hankkiatti.domain.student.entity.Student;
 import com.hankkiatti.support.TestAccounts;
@@ -152,7 +153,8 @@ class HelperCancelServiceTest {
         assertThat(waitingSecond.getStatus()).isEqualTo(ApplicationStatus.WAITING);
         assertThat(request.getStatus()).isEqualTo(HelpRequestStatus.MATCHED);
         assertThat(request.isHelperChanged()).isTrue();
-        verify(eventPublisher).publishEvent(new HelperConfirmedEvent(8L, REQUEST_ID, NOON, NOON.plusHours(1)));
+        verify(eventPublisher).publishEvent(new HelperConfirmedEvent(8L, REQUEST_ID, 41L, NOON, NOON.plusHours(1),
+                HelperConfirmedEvent.Kind.PROMOTED));
     }
 
     @Test
@@ -168,7 +170,7 @@ class HelperCancelServiceTest {
         assertThat(mine.getAfterAction()).isEqualTo(ApplicationAfterAction.REOPENED);
         assertThat(request.getStatus()).isEqualTo(HelpRequestStatus.RECRUITING);
         assertThat(request.isHelperChanged()).isFalse();
-        verifyNoInteractions(eventPublisher);
+        verify(eventPublisher).publishEvent(new HelpRequestReopenedEvent(REQUEST_ID));
     }
 
     @Test
@@ -313,7 +315,7 @@ class HelperCancelServiceTest {
     void leave_그사이승격돼응답대기_INVALID_STATUS() {
         // given
         Application waiting = givenMyWaitingLocked();
-        waiting.promote(NOW, NOON.minusMinutes(15));
+        waiting.promote(NOW, NOON.minusMinutes(15), null);
 
         // when & then
         assertApplicationError(() -> helperCancelService.leave(7L, 51L), ApplicationErrorType.INVALID_STATUS);
