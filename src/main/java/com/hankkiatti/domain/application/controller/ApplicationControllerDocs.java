@@ -3,6 +3,7 @@ package com.hankkiatti.domain.application.controller;
 import com.hankkiatti.domain.application.dto.request.HelperCancelRequestDto;
 import com.hankkiatti.domain.application.dto.response.ApplyResponseDto;
 import com.hankkiatti.domain.application.dto.response.HelperCancelResponseDto;
+import com.hankkiatti.domain.application.dto.response.MyApplicationResponseDto;
 import com.hankkiatti.domain.application.dto.response.MyApplicationsResponseDto;
 import com.hankkiatti.domain.application.entity.MyApplicationFilter;
 import com.hankkiatti.global.response.ApiResult;
@@ -12,7 +13,7 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
 
-@Tag(name = "지원", description = "도우미가 신청에 지원하고 매칭 현황을 보고 매칭을 취소하는 API")
+@Tag(name = "지원", description = "도우미가 신청에 지원하고 매칭 현황을 보고 매칭을 취소하고 승격에 응답하는 API")
 public interface ApplicationControllerDocs {
 
     @Operation(summary = "지원", description = """
@@ -59,4 +60,29 @@ public interface ApplicationControllerDocs {
     ResponseEntity<ApiResult<HelperCancelResponseDto>> cancel(@Parameter(hidden = true) AuthPrincipal principal,
                                                               @Parameter(description = "지원 ID") Long applicationId,
                                                               HelperCancelRequestDto request);
+
+    @Operation(summary = "승격 수락 (갈게요)", description = """
+            식사 1시간 이내에 예비에서 승격돼 응답 대기(PROMOTION_PENDING)인 지원을 수락한다. 매칭 완료(MATCHED)가 되고
+            장애학생 이름·카톡 ID(student)를 준다. 같은 시간대에 걸어 둔 다른 예비는 이때 자동 제외된다.
+            응답 마감(promotionDeadline — 식사 15분 전, 그보다 늦게 승격됐으면 식사 시작)이 지나면 수락할 수 없다.
+            응답은 매칭 현황 카드와 같은 모양이다.""")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "수락 완료 (status: MATCHED)")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "로그인 필요")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "비밀번호 변경 필요")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "APPLICATION_NOT_FOUND — 없는 지원이거나 내 지원이 아님")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "APPLICATION_INVALID_STATUS — 승격 응답 대기가 아님(이미 응답·자동 거절 등), APPLICATION_PROMOTION_EXPIRED — 응답 마감이 지남")
+    ResponseEntity<ApiResult<MyApplicationResponseDto>> acceptPromotion(@Parameter(hidden = true) AuthPrincipal principal,
+                                                                      @Parameter(description = "지원 ID") Long applicationId);
+
+    @Operation(summary = "승격 거절 (이번엔 어려워요)", description = """
+            승격 응답 대기인 지원을 거절한다. 패널티는 없다. 승격 거절(PROMOTION_DECLINED)이 되고, 다음 예비가 승격되거나
+            예비가 없으면 신청이 다시 모집 중이 된다. 마감이 지났어도 식사 시작 전이면 거절할 수 있다(자동 거절과 결과가 같다).
+            응답은 매칭 현황 카드와 같은 모양이다. 장애학생 정보는 주지 않는다.""")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "거절 완료 (status: PROMOTION_DECLINED)")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "로그인 필요")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "비밀번호 변경 필요")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "APPLICATION_NOT_FOUND — 없는 지원이거나 내 지원이 아님")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "APPLICATION_INVALID_STATUS — 승격 응답 대기가 아님, APPLICATION_PROMOTION_EXPIRED — 식사가 시작됨")
+    ResponseEntity<ApiResult<MyApplicationResponseDto>> declinePromotion(@Parameter(hidden = true) AuthPrincipal principal,
+                                                                       @Parameter(description = "지원 ID") Long applicationId);
 }

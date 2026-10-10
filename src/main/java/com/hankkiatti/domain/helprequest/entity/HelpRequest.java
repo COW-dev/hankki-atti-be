@@ -132,6 +132,12 @@ public class HelpRequest extends BaseTimeEntity {
         this.status = HelpRequestStatus.FAILED;
     }
 
+    // 승격된 도우미가 식사 시작까지 응답하지 않았다. 확정된 도우미가 없으니 매칭 실패로 끝낸다 (2026-10-10 결정)
+    public void failUnanswered() {
+        requireStatus(HelpRequestStatus.MATCHED);
+        this.status = HelpRequestStatus.FAILED;
+    }
+
     public void withdraw(LocalDateTime now) {
         requireStatus(HelpRequestStatus.RECRUITING);
         // 식사가 시작된 모집 중 신청은 스케줄러가 곧 매칭 실패로 바꾼다. 그 사이 철회되면 매칭 실패가 취소로 잡힌다

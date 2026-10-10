@@ -25,7 +25,7 @@ class ApplicationTest {
 
     private Application promotionPending() {
         Application application = waiting();
-        application.promote(NOW, true);
+        application.promote(NOW, NOW.plusMinutes(30));
         return application;
     }
 
@@ -59,30 +59,32 @@ class ApplicationTest {
     }
 
     @Test
-    void promote_응답필요_승격대기() {
+    void promote_응답마감있음_승격대기() {
         // given
         Application application = waiting();
 
         // when
-        application.promote(NOW, true);
+        application.promote(NOW, NOW.plusMinutes(30));
 
         // then
         assertThat(application.getStatus()).isEqualTo(ApplicationStatus.PROMOTION_PENDING);
         assertThat(application.getPromotedAt()).isEqualTo(NOW);
+        assertThat(application.getPromotionDeadline()).isEqualTo(NOW.plusMinutes(30));
         assertThat(application.getMatchedAt()).isNull();
     }
 
     @Test
-    void promote_응답불필요_바로매칭() {
+    void promote_응답마감없음_바로매칭() {
         // given
         Application application = waiting();
 
         // when
-        application.promote(NOW, false);
+        application.promote(NOW, null);
 
         // then
         assertThat(application.getStatus()).isEqualTo(ApplicationStatus.MATCHED);
         assertThat(application.getPromotedAt()).isEqualTo(NOW);
+        assertThat(application.getPromotionDeadline()).isNull();
         assertThat(application.getMatchedAt()).isEqualTo(NOW);
     }
 
