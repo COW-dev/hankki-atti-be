@@ -173,33 +173,6 @@ class DomainRepositoryTest {
     }
 
     @Test
-    void 관리자학생상세조회_계정과신청과지원도우미를필요한순서로조회() {
-        // given
-        Student student = saveStudent();
-        Helper helper = saveHelper();
-        HelpRequest earlier = helpRequestRepository.save(new HelpRequest(
-                student, NOW.plusDays(1), Set.of(HelpType.SERVING), null, null));
-        HelpRequest later = helpRequestRepository.save(new HelpRequest(
-                student, NOW.plusDays(2), Set.of(HelpType.SEATING), null, null));
-        Application application = applicationRepository.save(new Application(later, helper, NOW));
-        flushAndClear();
-
-        // when
-        Student found = studentRepository.findWithAccountByAccountId(student.getAccountId()).orElseThrow();
-        List<HelpRequest> requests =
-                helpRequestRepository.findByStudentAccountIdOrderByStartAtDescIdDesc(student.getAccountId());
-        List<Application> applications = applicationRepository.findWithHelperByHelpRequestIdIn(
-                List.of(earlier.getId(), later.getId()));
-
-        // then
-        assertThat(Hibernate.isInitialized(found.getAccount())).isTrue();
-        assertThat(requests).extracting(HelpRequest::getId).containsExactly(later.getId(), earlier.getId());
-        assertThat(applications).extracting(Application::getId).containsExactly(application.getId());
-        assertThat(applications).allSatisfy(
-                foundApplication -> assertThat(Hibernate.isInitialized(foundApplication.getHelper())).isTrue());
-    }
-
-    @Test
     void 계정비활성화대상조회_진행중신청과활성지원만조회() {
         // given
         Student student = saveStudent();
@@ -228,7 +201,7 @@ class DomainRepositoryTest {
 
         // when
         List<Long> requestIds = helpRequestRepository.findActiveIdsByStudentAccountId(student.getAccountId());
-        List<Application> applications = applicationRepository.findActiveByHelpRequestIdForUpdate(matched.getId());
+        List<Application> applications = applicationRepository.findActiveForUpdate(matched.getId());
 
         // then
         assertThat(requestIds).containsExactly(recruiting.getId(), matched.getId());
@@ -406,7 +379,7 @@ class DomainRepositoryTest {
         Application matched = new Application(request, helper, NOW);
         matched.match(NOW);
         Application pending = new Application(request, helper, NOW);
-        pending.promote(NOW, NOW.plusMinutes(30));
+        pending.promote(NOW, NOW.plusMinutes(30), null, 1);
         Application waiting = new Application(request, helper, NOW);
         Application withdrawn = new Application(request, helper, NOW);
         withdrawn.withdraw(NOW);

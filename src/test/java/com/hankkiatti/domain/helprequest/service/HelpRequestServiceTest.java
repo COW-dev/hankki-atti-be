@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.hankkiatti.domain.account.entity.AccountRole;
 import com.hankkiatti.domain.application.entity.Application;
@@ -23,6 +24,7 @@ import com.hankkiatti.domain.helprequest.entity.HelpRequest;
 import com.hankkiatti.domain.helprequest.entity.HelpRequestStatus;
 import com.hankkiatti.domain.helprequest.entity.HelpType;
 import com.hankkiatti.domain.helprequest.entity.RequestCancelType;
+import com.hankkiatti.domain.helprequest.event.HelpRequestCanceledByStudentEvent;
 import com.hankkiatti.domain.helprequest.exception.HelpRequestErrorType;
 import com.hankkiatti.domain.helprequest.exception.HelpRequestException;
 import com.hankkiatti.domain.helprequest.repository.HelpRequestRepository;
@@ -43,6 +45,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
@@ -63,13 +66,16 @@ class HelpRequestServiceTest {
     @Mock
     private ApplicationRepository applicationRepository;
 
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
+
     private HelpRequestService helpRequestService;
 
     @BeforeEach
     void setUp() {
         Clock clock = Clock.fixed(MONDAY.atTime(9, 0).atZone(SEOUL).toInstant(), SEOUL);
         helpRequestService = new HelpRequestService(helpRequestRepository, studentRepository, applicationRepository,
-                new HelpRequestSchedule(), clock);
+                new HelpRequestSchedule(), eventPublisher, clock);
     }
 
     private void givenStudentWithoutOverlap(LocalDateTime startAt) {
@@ -411,5 +417,86 @@ class HelpRequestServiceTest {
         // when & then
         assertErrorType(() -> helpRequestService.reportNoShow(3L, 1L), HelpRequestErrorType.NOT_FOUND);
         assertThat(othersRequest.getStatus()).isEqualTo(HelpRequestStatus.COMPLETED);
+    }
+
+    // ---- 장애학생 매칭 취소 (지금 = 2026-10-12(월) 09:00) ----
+
+    private Helper helperWithId(Long id, String studentNo) {
+        Helper helper = TestProfiles.helper(TestAccounts.withId(id, AccountRole.HELPER, "hash", false), studentNo);
+        ReflectionTestUtils.setField(helper, "accountId", id);
+        return helper;
+    }
+
+    private HelpRequest myMatchedRequest(LocalDateTime startAt) {
+        HelpRequest request = myRecruitingRequest(1L, startAt);
+        request.match(startAt.minusDays(1));
+        return request;
+    }
+
+    private void givenMyRequestLocked(HelpRequest request) {
+        given(studentRepository.existsById(STUDENT_ID)).willReturn(true);
+        given(helpRequestRepository.findByIdForUpdate(1L)).willReturn(Optional.of(request));
+    }
+
+    @Test
+    void cancelMatched_매칭완료_신청취소되고매칭응답대기예비모두학생취소와이벤트() {
+        // given
+        HelpRequest request = myMatchedRequest(NOON);
+        Application matched = matchedApplication(31L, request, helperWithId(7L, "60230001"));
+        Application pending = new Application(request, helperWithId(8L, "60230002"), NOON.minusDays(1));
+        pending.promote(NOON.minusMinutes(40), NOON.minusMinutes(15), null, 1);
+        Application waiting = new Application(request, helperWithId(9L, "60230003"), NOON.minusDays(1));
+        ReflectionTestUtils.setField(pending, "id", 32L);
+        ReflectionTestUtils.setField(waiting, "id", 33L);
+        givenMyRequestLocked(request);
+        given(applicationRepository.findActiveForUpdate(1L)).willReturn(List.of(matched, pending, waiting));
+
+        // when
+        MyHelpRequestResponseDto result = helpRequestService.cancelMatched(STUDENT_ID, 1L);
+
+        // then
+        assertThat(request.getStatus()).isEqualTo(HelpRequestStatus.CANCELED);
+        assertThat(request.getCancelType()).isEqualTo(RequestCancelType.STUDENT_CANCEL);
+        assertThat(request.getCanceledAt()).isEqualTo(MONDAY.atTime(9, 0));
+        assertThat(List.of(matched, pending, waiting)).extracting(Application::getStatus)
+                .containsOnly(ApplicationStatus.STUDENT_CANCELED);
+        assertThat(result.status()).isEqualTo(HelpRequestStatus.CANCELED);
+        assertThat(result.helper()).isNull();
+        verify(eventPublisher).publishEvent(new HelpRequestCanceledByStudentEvent(1L, NOON, List.of(31L, 32L, 33L)));
+    }
+
+    @Test
+    void cancelMatched_모집중_INVALID_STATUS이고지원을건드리지않음() {
+        // given
+        givenMyRequestLocked(myRecruitingRequest(1L, NOON));
+
+        // when & then
+        assertErrorType(() -> helpRequestService.cancelMatched(STUDENT_ID, 1L), HelpRequestErrorType.INVALID_STATUS);
+        verify(applicationRepository, never()).findActiveForUpdate(any());
+        verifyNoInteractions(eventPublisher);
+    }
+
+    @Test
+    void cancelMatched_식사시작뒤_INVALID_STATUS() {
+        // given — 08:30 식사가 이미 시작됐다
+        HelpRequest request = myMatchedRequest(MONDAY.atTime(8, 30));
+        givenMyRequestLocked(request);
+
+        // when & then
+        assertErrorType(() -> helpRequestService.cancelMatched(STUDENT_ID, 1L), HelpRequestErrorType.INVALID_STATUS);
+        assertThat(request.getStatus()).isEqualTo(HelpRequestStatus.MATCHED);
+        verifyNoInteractions(eventPublisher);
+    }
+
+    @Test
+    void cancelMatched_남의신청_NOT_FOUND() {
+        // given
+        HelpRequest othersRequest = myMatchedRequest(NOON);
+        given(studentRepository.existsById(3L)).willReturn(true);
+        given(helpRequestRepository.findByIdForUpdate(1L)).willReturn(Optional.of(othersRequest));
+
+        // when & then
+        assertErrorType(() -> helpRequestService.cancelMatched(3L, 1L), HelpRequestErrorType.NOT_FOUND);
+        assertThat(othersRequest.getStatus()).isEqualTo(HelpRequestStatus.MATCHED);
     }
 }

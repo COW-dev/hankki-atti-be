@@ -27,9 +27,6 @@ public interface StudentRepository extends JpaRepository<Student, Long> {
                          @Param("disabilityType") DisabilityType disabilityType,
                          @Param("status") AccountStatus status);
 
-    @Query("select s from Student s join fetch s.account where s.accountId = :accountId")
-    Optional<Student> findWithAccountByAccountId(@Param("accountId") Long accountId);
-
     /**
      * 장애학생 행을 잠그고 가져온다. 같은 장애학생의 신청 생성은 이 락으로 한 줄로 선다.
      */

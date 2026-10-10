@@ -6,7 +6,6 @@ import com.hankkiatti.domain.student.dto.request.AdminStudentUpdateRequestDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentAccountStatusResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentCreateResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentCredentialMailResponseDto;
-import com.hankkiatti.domain.student.dto.response.AdminStudentDetailResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentInfoResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentSummaryResponseDto;
 import com.hankkiatti.domain.student.entity.DisabilityType;
@@ -32,16 +31,6 @@ public interface AdminStudentControllerDocs {
             @Parameter(description = "이름 또는 학번 검색어") String keyword,
             @Parameter(description = "장애 유형 필터 (전체 권한만)") DisabilityType disabilityType,
             @Parameter(description = "계정 상태 필터") AccountStatus status);
-
-    @Operation(summary = "장애학생 상세", description = """
-            정보·매칭현황·취소/노쇼 이력을 조회합니다. 전체 권한 관리자는 수정에 필요한 학생 정보 원문을 받습니다.
-            제한 권한 관리자에게는 이름·학번·상태·최근 신청만 제공하며 민감한 학생 정보는 응답에서 제외합니다.
-            """)
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공")
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "장애학생 없음")
-    ResponseEntity<ApiResult<AdminStudentDetailResponseDto>> getStudent(
-            @Parameter(hidden = true) AuthPrincipal principal,
-            @Parameter(description = "학생 계정 ID") Long studentAccountId);
 
     @Operation(summary = "장애학생 정보 수정", description = "전체 권한 관리자가 이름·연락처·학교 이메일·장애 정보를 수정합니다. 학번은 바꾸지 않습니다.")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "수정 성공")

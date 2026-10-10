@@ -6,7 +6,6 @@ import com.hankkiatti.domain.student.dto.request.AdminStudentUpdateRequestDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentAccountStatusResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentCreateResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentCredentialMailResponseDto;
-import com.hankkiatti.domain.student.dto.response.AdminStudentDetailResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentInfoResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentSummaryResponseDto;
 import com.hankkiatti.domain.student.entity.DisabilityType;
@@ -45,15 +44,6 @@ public class AdminStudentController implements AdminStudentControllerDocs {
             @RequestParam(required = false) AccountStatus status) {
         return ApiResponse.of(SuccessType.SUCCESS,
                 adminStudentService.getStudents(principal.accountId(), keyword, disabilityType, status));
-    }
-
-    @Override
-    @GetMapping("/{studentAccountId}")
-    public ResponseEntity<ApiResult<AdminStudentDetailResponseDto>> getStudent(
-            @AuthenticationPrincipal AuthPrincipal principal,
-            @PathVariable Long studentAccountId) {
-        return ApiResponse.of(SuccessType.SUCCESS,
-                adminStudentService.getStudent(principal.accountId(), studentAccountId));
     }
 
     @Override

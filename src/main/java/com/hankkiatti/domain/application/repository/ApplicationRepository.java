@@ -19,26 +19,6 @@ public interface ApplicationRepository extends JpaRepository<Application, Long> 
 
     List<Application> findByHelpRequestIdAndStatus(Long helpRequestId, ApplicationStatus status);
 
-    default List<Application> findActiveByHelpRequestIdForUpdate(Long helpRequestId) {
-        return findByHelpRequestIdAndStatusInForUpdate(helpRequestId, ApplicationStatus.ACTIVE);
-    }
-
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("""
-            select a from Application a
-            where a.helpRequest.id = :helpRequestId and a.status in :statuses
-            order by a.id""")
-    List<Application> findByHelpRequestIdAndStatusInForUpdate(
-            @Param("helpRequestId") Long helpRequestId,
-            @Param("statuses") Collection<ApplicationStatus> statuses);
-
-    @Query("""
-            select a from Application a join fetch a.helper
-            where a.helpRequest.id in :helpRequestIds
-            order by a.helpRequest.id, a.appliedAt, a.id""")
-    List<Application> findWithHelperByHelpRequestIdIn(
-            @Param("helpRequestIds") Collection<Long> helpRequestIds);
-
     // 예비 순번 계산용. 신청 행을 잠근 뒤 세므로 그 사이 다른 예비가 끼어들지 않는다
     long countByHelpRequestIdAndStatus(Long helpRequestId, ApplicationStatus status);
 
@@ -99,6 +79,21 @@ public interface ApplicationRepository extends JpaRepository<Application, Long> 
                                                             @Param("status") ApplicationStatus status);
 
     /**
+     * 신청의 진행 중 지원(매칭 완료·승격 응답 대기·예비)을 잠그고 가져온다 (장애학생 매칭 취소). 신청 행 락 다음에 잡는다.
+     */
+    default List<Application> findActiveForUpdate(Long helpRequestId) {
+        return findByHelpRequestIdAndStatusInForUpdate(helpRequestId, ApplicationStatus.ACTIVE);
+    }
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select a from Application a
+            where a.helpRequest.id = :helpRequestId and a.status in :statuses
+            order by a.id""")
+    List<Application> findByHelpRequestIdAndStatusInForUpdate(@Param("helpRequestId") Long helpRequestId,
+                                                              @Param("statuses") Collection<ApplicationStatus> statuses);
+
+    /**
      * 신청들에 매칭된 지원(매칭 완료·이용 완료·노쇼)을 도우미와 함께 가져온다. 장애학생에게 도우미 이름·카톡 ID를 보여 줄 때 쓴다.
      * 승격 응답 대기 중인 지원은 넣지 않는다 — 확정되지 않은 도우미의 연락처를 미리 알리지 않으려고.
      */
@@ -152,6 +147,21 @@ public interface ApplicationRepository extends JpaRepository<Application, Long> 
             @Param("status") ApplicationStatus status);
 
     /**
+     * 재알림 시각(식사 30분 전)이 된 승격 응답 대기의 ID. 보내고 나면 재알림 시각이 비어 다시 나오지 않는다.
+     */
+    default List<Long> findIdsToRemindPromotion(LocalDateTime now, int limit) {
+        return findIdsByStatusAndRemindAtPassed(ApplicationStatus.PROMOTION_PENDING, now, PageRequest.of(0, limit));
+    }
+
+    @Query("""
+            select a.id from Application a
+            where a.status = :status and a.promotionRemindAt <= :now
+            order by a.promotionRemindAt, a.id""")
+    List<Long> findIdsByStatusAndRemindAtPassed(@Param("status") ApplicationStatus status,
+                                                @Param("now") LocalDateTime now,
+                                                Pageable pageable);
+
+    /**
      * 응답 마감이 지난 승격 응답 대기의 ID (자동 거절 대상). 마감이 식사 시작인 것은 식사 시작 처리가 맡아 넣지 않는다.
      */
     default List<Long> findIdsPromotionExpired(LocalDateTime now, int limit) {
@@ -166,6 +176,41 @@ public interface ApplicationRepository extends JpaRepository<Application, Long> 
     List<Long> findIdsByStatusAndDeadlinePassed(@Param("status") ApplicationStatus status,
                                                 @Param("now") LocalDateTime now,
                                                 Pageable pageable);
+
+    /**
+     * 신청들의 지금 예비 인원 (관리자 전체 신청 현황). 예비가 없는 신청은 결과에 없다.
+     */
+    default List<HelpRequestApplicationCount> countWaitingByHelpRequest(Collection<Long> helpRequestIds) {
+        return countByHelpRequestIdInAndStatus(helpRequestIds, ApplicationStatus.WAITING);
+    }
+
+    @Query("""
+            select new com.hankkiatti.domain.application.repository.HelpRequestApplicationCount(a.helpRequest.id, count(a))
+            from Application a
+            where a.helpRequest.id in :helpRequestIds and a.status = :status
+            group by a.helpRequest.id""")
+    List<HelpRequestApplicationCount> countByHelpRequestIdInAndStatus(
+            @Param("helpRequestIds") Collection<Long> helpRequestIds,
+            @Param("status") ApplicationStatus status);
+
+    /**
+     * 신청들 중 예비가 승격돼 도우미 응답을 기다리는 신청의 ID (관리자 전체 신청 현황).
+     */
+    default List<Long> findHelpRequestIdsAwaitingPromotion(Collection<Long> helpRequestIds) {
+        return findHelpRequestIdsByStatus(helpRequestIds, ApplicationStatus.PROMOTION_PENDING);
+    }
+
+    @Query("""
+            select distinct a.helpRequest.id from Application a
+            where a.helpRequest.id in :helpRequestIds and a.status = :status""")
+    List<Long> findHelpRequestIdsByStatus(@Param("helpRequestIds") Collection<Long> helpRequestIds,
+                                          @Param("status") ApplicationStatus status);
+
+    /**
+     * 신청들의 지원 전부를 도우미와 함께 (관리자 장애학생 상세 — 매칭현황·취소·노쇼 이력). 한 학생의 신청이라 많지 않다.
+     */
+    @Query("select a from Application a join fetch a.helper where a.helpRequest.id in :helpRequestIds")
+    List<Application> findWithHelperByHelpRequestIdIn(@Param("helpRequestIds") Collection<Long> helpRequestIds);
 
     /**
      * 도우미의 봉사시간 합계. 봉사시간이 기록된 지원(이용 완료 1.0, 노쇼 0)만 더한다. 하나도 없으면 null.

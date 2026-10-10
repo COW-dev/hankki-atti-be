@@ -25,7 +25,7 @@ class ApplicationTest {
 
     private Application promotionPending() {
         Application application = waiting();
-        application.promote(NOW, NOW.plusMinutes(30));
+        application.promote(NOW, NOW.plusMinutes(30), null, 1);
         return application;
     }
 
@@ -64,7 +64,7 @@ class ApplicationTest {
         Application application = waiting();
 
         // when
-        application.promote(NOW, NOW.plusMinutes(30));
+        application.promote(NOW, NOW.plusMinutes(30), null, 1);
 
         // then
         assertThat(application.getStatus()).isEqualTo(ApplicationStatus.PROMOTION_PENDING);
@@ -79,7 +79,7 @@ class ApplicationTest {
         Application application = waiting();
 
         // when
-        application.promote(NOW, null);
+        application.promote(NOW, null, null, 1);
 
         // then
         assertThat(application.getStatus()).isEqualTo(ApplicationStatus.MATCHED);

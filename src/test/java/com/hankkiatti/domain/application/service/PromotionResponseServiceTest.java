@@ -14,6 +14,7 @@ import com.hankkiatti.domain.application.entity.Application;
 import com.hankkiatti.domain.application.entity.ApplicationAfterAction;
 import com.hankkiatti.domain.application.entity.ApplicationStatus;
 import com.hankkiatti.domain.application.event.HelperConfirmedEvent;
+import com.hankkiatti.domain.application.event.PromotionPendingEvent;
 import com.hankkiatti.domain.application.exception.ApplicationErrorType;
 import com.hankkiatti.domain.application.exception.ApplicationException;
 import com.hankkiatti.domain.application.repository.ApplicationRepository;
@@ -71,7 +72,7 @@ class PromotionResponseServiceTest {
         ReflectionTestUtils.setField(helper, "accountId", HELPER_ID);
         pending = new Application(request, helper, NOON.minusDays(1));
         ReflectionTestUtils.setField(pending, "id", APPLICATION_ID);
-        pending.promote(NOON.minusMinutes(40), DEADLINE);
+        pending.promote(NOON.minusMinutes(40), DEADLINE, null, 1);
     }
 
     private PromotionResponseService serviceAt(LocalDateTime now) {
@@ -112,7 +113,8 @@ class PromotionResponseServiceTest {
         assertThat(result.status()).isEqualTo(ApplicationStatus.MATCHED);
         assertThat(result.student().name()).isEqualTo("학생60231234");
         assertThat(result.promotionDeadline()).isNull();
-        verify(eventPublisher).publishEvent(new HelperConfirmedEvent(HELPER_ID, REQUEST_ID, NOON, NOON.plusHours(1)));
+        verify(eventPublisher).publishEvent(new HelperConfirmedEvent(HELPER_ID, REQUEST_ID, APPLICATION_ID, NOON,
+                NOON.plusHours(1), HelperConfirmedEvent.Kind.PROMOTION_ACCEPTED));
     }
 
     @Test
@@ -241,5 +243,60 @@ class PromotionResponseServiceTest {
         // then
         verify(helpRequestRepository, never()).findByIdForUpdate(any());
         verifyNoInteractions(waitingPromoter);
+    }
+
+    // ---- 식사 30분 전 재알림 ----
+
+    private void givenRemindAt(LocalDateTime remindAt) {
+        ReflectionTestUtils.setField(pending, "promotionRemindAt", remindAt);
+        givenLockedForJob();
+    }
+
+    @Test
+    void remindUnanswered_재알림시각_한번더알리고비움() {
+        // given
+        givenRemindAt(NOON.minusMinutes(30));
+
+        // when
+        serviceAt(NOON.minusMinutes(30)).remindUnanswered(APPLICATION_ID, NOON.minusMinutes(30));
+
+        // then
+        assertThat(pending.getPromotionRemindAt()).isNull();
+        verify(eventPublisher).publishEvent(new PromotionPendingEvent(APPLICATION_ID, true));
+    }
+
+    @Test
+    void remindUnanswered_아직재알림시각전_건너뜀() {
+        // given
+        givenRemindAt(NOON.minusMinutes(30));
+
+        // when
+        serviceAt(NOON.minusMinutes(31)).remindUnanswered(APPLICATION_ID, NOON.minusMinutes(31));
+
+        // then
+        assertThat(pending.getPromotionRemindAt()).isEqualTo(NOON.minusMinutes(30));
+        verifyNoInteractions(eventPublisher);
+    }
+
+    @Test
+    void remindUnanswered_이미보냈거나그사이수락함_건너뜀() {
+        // given — 다른 서버가 이미 보내 재알림 시각이 비었다
+        givenRemindAt(null);
+
+        // when
+        serviceAt(NOON.minusMinutes(29)).remindUnanswered(APPLICATION_ID, NOON.minusMinutes(29));
+
+        // then
+        verifyNoInteractions(eventPublisher);
+
+        // given — 재알림 전에 수락했다
+        ReflectionTestUtils.setField(pending, "promotionRemindAt", NOON.minusMinutes(30));
+        pending.acceptPromotion(NOON.minusMinutes(35));
+
+        // when
+        serviceAt(NOON.minusMinutes(29)).remindUnanswered(APPLICATION_ID, NOON.minusMinutes(29));
+
+        // then
+        verify(eventPublisher, never()).publishEvent(any(PromotionPendingEvent.class));
     }
 }

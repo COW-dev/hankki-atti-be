@@ -5,6 +5,7 @@ import com.hankkiatti.domain.application.entity.Application;
 import com.hankkiatti.domain.application.entity.ApplicationAfterAction;
 import com.hankkiatti.domain.application.entity.ApplicationStatus;
 import com.hankkiatti.domain.application.event.HelperConfirmedEvent;
+import com.hankkiatti.domain.application.event.PromotionPendingEvent;
 import com.hankkiatti.domain.application.exception.ApplicationErrorType;
 import com.hankkiatti.domain.application.exception.ApplicationException;
 import com.hankkiatti.domain.application.repository.ApplicationRepository;
@@ -49,9 +50,9 @@ public class PromotionResponseService {
 
         application.acceptPromotion(now);
         log.info("승격 수락: applicationId={}, helpRequestId={}, helperId={}", applicationId, request.getId(), helperId);
-        // 응답 대기 동안 남겨 둔 겹치는 다른 예비를 커밋 뒤 자동 제외한다 (BE-32)
-        eventPublisher.publishEvent(
-                new HelperConfirmedEvent(helperId, request.getId(), request.getStartAt(), request.getEndAt()));
+        // 응답 대기 동안 남겨 둔 겹치는 다른 예비를 커밋 뒤 자동 제외하고(BE-32), 장애학생에게 도우미 바뀜 알림을 쌓는다(BE-51)
+        eventPublisher.publishEvent(new HelperConfirmedEvent(helperId, request.getId(), applicationId,
+                request.getStartAt(), request.getEndAt(), HelperConfirmedEvent.Kind.PROMOTION_ACCEPTED));
         return MyApplicationService.toCard(application, null);
     }
 
@@ -98,6 +99,30 @@ public class PromotionResponseService {
         ApplicationAfterAction after = waitingPromoter.promoteOrReopen(request, now);
         log.info("승격 응답 마감 → 자동 거절: applicationId={}, helpRequestId={}, after={}",
                 applicationId, helpRequestId, after);
+    }
+
+    /**
+     * 식사 30분 전까지 응답하지 않은 승격에 한 번 더 알린다 (MealTimeJob). 잠근 뒤 아직 응답 대기이고 재알림 시각이 됐는지 다시 확인한다 —
+     * 그사이 응답했거나 다른 서버가 이미 보냈으면 건너뛴다.
+     */
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public void remindUnanswered(Long applicationId, LocalDateTime now) {
+        Long helpRequestId = applicationRepository.findHelpRequestIdById(applicationId).orElse(null);
+        if (helpRequestId == null) {
+            return;
+        }
+        HelpRequest request = helpRequestRepository.findByIdForUpdate(helpRequestId).orElse(null);
+        Application application = applicationRepository.findByIdForUpdate(applicationId).orElse(null);
+        if (request == null || application == null
+                || application.getStatus() != ApplicationStatus.PROMOTION_PENDING
+                || application.getPromotionRemindAt() == null
+                || application.getPromotionRemindAt().isAfter(now)) {
+            return;
+        }
+
+        application.markPromotionReminded();
+        eventPublisher.publishEvent(new PromotionPendingEvent(applicationId, true));
+        log.info("승격 응답 재알림: applicationId={}, helpRequestId={}", applicationId, helpRequestId);
     }
 
     // 내 승격 응답 대기를 신청 → 지원 순으로 잠가 가져온다. 없는 지원과 남의 지원은 같은 404

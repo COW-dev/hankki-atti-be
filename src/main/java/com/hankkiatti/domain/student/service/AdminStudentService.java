@@ -7,29 +7,21 @@ import com.hankkiatti.domain.account.repository.AccountRepository;
 import com.hankkiatti.domain.admin.entity.Admin;
 import com.hankkiatti.domain.admin.repository.AdminRepository;
 import com.hankkiatti.domain.application.entity.Application;
-import com.hankkiatti.domain.application.entity.ApplicationStatus;
 import com.hankkiatti.domain.application.repository.ApplicationRepository;
 import com.hankkiatti.domain.auth.exception.AuthErrorType;
 import com.hankkiatti.domain.auth.exception.AuthException;
 import com.hankkiatti.domain.auth.repository.PasswordResetTokenRepository;
 import com.hankkiatti.domain.common.PhoneNumbers;
 import com.hankkiatti.domain.helprequest.entity.HelpRequest;
-import com.hankkiatti.domain.helprequest.entity.HelpRequestStatus;
-import com.hankkiatti.domain.helprequest.entity.RequestCancelType;
 import com.hankkiatti.domain.helprequest.repository.HelpRequestRepository;
 import com.hankkiatti.domain.mail.entity.MailType;
 import com.hankkiatti.domain.mail.service.MailOutboxService;
 import com.hankkiatti.domain.student.dto.request.AdminStudentCreateRequestDto;
 import com.hankkiatti.domain.student.dto.request.AdminStudentUpdateRequestDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentAccountStatusResponseDto;
-import com.hankkiatti.domain.student.dto.response.AdminStudentApplicationResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentCreateResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentCredentialMailResponseDto;
-import com.hankkiatti.domain.student.dto.response.AdminStudentDetailResponseDto;
-import com.hankkiatti.domain.student.dto.response.AdminStudentIncidentResponseDto;
-import com.hankkiatti.domain.student.dto.response.AdminStudentIncidentType;
 import com.hankkiatti.domain.student.dto.response.AdminStudentInfoResponseDto;
-import com.hankkiatti.domain.student.dto.response.AdminStudentMatchingResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentSummaryResponseDto;
 import com.hankkiatti.domain.student.entity.CredentialMailStatus;
 import com.hankkiatti.domain.student.entity.DisabilityType;
@@ -43,11 +35,9 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Objects;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -96,24 +86,6 @@ public class AdminStudentService {
                 .toList();
     }
 
-    @Transactional(readOnly = true)
-    public AdminStudentDetailResponseDto getStudent(Long adminAccountId, Long studentAccountId) {
-        Admin admin = requireAdmin(adminAccountId);
-        Student student = studentRepository.findWithAccountByAccountId(studentAccountId)
-                .orElseThrow(() -> new StudentException(StudentErrorType.NOT_FOUND,
-                        "studentAccountId=" + studentAccountId));
-        List<HelpRequest> requests =
-                helpRequestRepository.findByStudentAccountIdOrderByStartAtDescIdDesc(studentAccountId);
-        Map<Long, List<Application>> applications = applicationsByRequest(requests);
-
-        LocalDateTime recentRequestAt = requests.isEmpty() ? null : requests.get(0).getStartAt();
-        return new AdminStudentDetailResponseDto(
-                toInfo(student, recentRequestAt, admin.isFull()),
-                requests.stream().map(request -> toMatching(request, applications.getOrDefault(
-                        request.getId(), List.of()))).toList(),
-                incidentHistory(requests, applications));
-    }
-
     @Transactional
     public AdminStudentInfoResponseDto update(Long adminAccountId, Long studentAccountId,
                                               AdminStudentUpdateRequestDto request) {
@@ -129,9 +101,8 @@ public class AdminStudentService {
                 request.disabilityType(),
                 trimToNull(request.specialNote()));
 
-        LocalDateTime recentRequestAt = recentRequestAt(List.of(student)).get(studentAccountId);
         log.info("장애학생 정보 수정: accountId={}", studentAccountId);
-        return toInfo(student, recentRequestAt, true);
+        return toInfo(student);
     }
 
     @Transactional
@@ -164,7 +135,7 @@ public class AdminStudentService {
                 continue;
             }
             List<Application> activeApplications =
-                    applicationRepository.findActiveByHelpRequestIdForUpdate(requestId);
+                    applicationRepository.findActiveForUpdate(requestId);
             activeApplications.forEach(Application::cancelByStudent);
             canceledApplications += activeApplications.size();
             helpRequest.cancelByDeactivation(now);
@@ -207,7 +178,8 @@ public class AdminStudentService {
                     request.disabilityType(),
                     trimToNull(request.specialNote())));
         } catch (DataIntegrityViolationException exception) {
-            throw new StudentException(StudentErrorType.REGISTRATION_CONFLICT, "studentNo=" + studentNo);
+            // 학번은 남기지 않는다 — "이 학번은 장애학생"이 로그에 남는다
+            throw new StudentException(StudentErrorType.REGISTRATION_CONFLICT, "학번·아이디 중복");
         }
 
         mailOutboxService.enqueue(
@@ -216,7 +188,7 @@ public class AdminStudentService {
                 CREDENTIAL_MAIL_SUBJECT,
                 credentialMailBody(studentNo, temporaryPassword),
                 account.getId());
-        log.info("장애학생 등록: accountId={}, studentNo={}", account.getId(), studentNo);
+        log.info("장애학생 등록: accountId={}", account.getId());
 
         return new AdminStudentCreateResponseDto(
                 account.getId(),
@@ -300,119 +272,22 @@ public class AdminStudentService {
                         StudentRecentRequestProjection::getRecentRequestAt));
     }
 
-    private Map<Long, List<Application>> applicationsByRequest(List<HelpRequest> requests) {
-        if (requests.isEmpty()) {
-            return Map.of();
-        }
-        return applicationRepository.findWithHelperByHelpRequestIdIn(
-                        requests.stream().map(HelpRequest::getId).toList()).stream()
-                .collect(Collectors.groupingBy(application -> application.getHelpRequest().getId()));
-    }
-
-    private AdminStudentInfoResponseDto toInfo(Student student, LocalDateTime recentRequestAt,
-                                               boolean fullAdmin) {
+    private AdminStudentInfoResponseDto toInfo(Student student) {
         Account account = student.getAccount();
         return new AdminStudentInfoResponseDto(
                 student.getAccountId(),
                 student.getName(),
                 student.getStudentNo(),
-                fullAdmin ? student.getPhone() : null,
-                fullAdmin ? student.getKakaoId() : null,
-                fullAdmin ? student.getSchoolEmail() : null,
-                fullAdmin ? student.getDisabilityType() : null,
-                fullAdmin ? student.getSpecialNote() : null,
                 account.getStatus(),
-                fullAdmin ? account.getLastLoginAt() : null,
-                fullAdmin ? account.getDeactivatedAt() : null,
-                fullAdmin ? student.getCredentialMailStatus() : null,
-                fullAdmin ? student.getCredentialMailSentAt() : null,
-                recentRequestAt);
-    }
-
-    private AdminStudentMatchingResponseDto toMatching(HelpRequest request, List<Application> applications) {
-        return new AdminStudentMatchingResponseDto(
-                request.getId(),
-                request.getStartAt(),
-                request.getEndAt(),
-                request.getStatus(),
-                request.getHelpTypes().stream().sorted().toList(),
-                applications.stream().map(this::toApplication).toList());
-    }
-
-    private AdminStudentApplicationResponseDto toApplication(Application application) {
-        return new AdminStudentApplicationResponseDto(
-                application.getId(),
-                application.getHelper().getAccountId(),
-                application.getHelper().getName(),
-                application.getHelper().getStudentNo(),
-                application.getStatus(),
-                application.getAppliedAt(),
-                application.getMatchedAt(),
-                application.getCanceledAt());
-    }
-
-    private List<AdminStudentIncidentResponseDto> incidentHistory(
-            List<HelpRequest> requests, Map<Long, List<Application>> applications) {
-        List<AdminStudentIncidentResponseDto> incidents = new ArrayList<>();
-        for (HelpRequest request : requests) {
-            if (request.getStatus() == HelpRequestStatus.CANCELED) {
-                incidents.add(requestCancellation(request));
-            } else if (request.getStatus() == HelpRequestStatus.NO_SHOW) {
-                incidents.add(new AdminStudentIncidentResponseDto(
-                        AdminStudentIncidentType.NO_SHOW,
-                        request.getId(),
-                        null,
-                        request.getStartAt(),
-                        request.getNoShowReportedAt(),
-                        null,
-                        null,
-                        null,
-                        null));
-            }
-            applications.getOrDefault(request.getId(), List.of()).stream()
-                    .filter(application -> application.getStatus() == ApplicationStatus.HELPER_CANCELED)
-                    .map(this::helperCancellation)
-                    .forEach(incidents::add);
-        }
-        incidents.sort(Comparator.comparing(
-                        AdminStudentIncidentResponseDto::occurredAt,
-                        Comparator.nullsLast(Comparator.reverseOrder()))
-                .thenComparing(AdminStudentIncidentResponseDto::helpRequestId, Comparator.reverseOrder()));
-        return incidents;
-    }
-
-    private AdminStudentIncidentResponseDto requestCancellation(HelpRequest request) {
-        return new AdminStudentIncidentResponseDto(
-                toIncidentType(request.getCancelType()),
-                request.getId(),
-                null,
-                request.getStartAt(),
-                request.getCanceledAt(),
-                null,
-                null,
-                null,
-                null);
-    }
-
-    private AdminStudentIncidentResponseDto helperCancellation(Application application) {
-        return new AdminStudentIncidentResponseDto(
-                AdminStudentIncidentType.HELPER_CANCELED,
-                application.getHelpRequest().getId(),
-                application.getId(),
-                application.getHelpRequest().getStartAt(),
-                application.getCanceledAt(),
-                application.getHelper().getName(),
-                application.getHelper().getStudentNo(),
-                application.getCancelReason(),
-                application.getCancelReasonDetail());
-    }
-
-    private static AdminStudentIncidentType toIncidentType(RequestCancelType cancelType) {
-        return switch (Objects.requireNonNull(cancelType)) {
-            case STUDENT_WITHDRAW -> AdminStudentIncidentType.REQUEST_WITHDRAWN;
-            case STUDENT_CANCEL -> AdminStudentIncidentType.STUDENT_CANCELED;
-            case ACCOUNT_DEACTIVATED -> AdminStudentIncidentType.ACCOUNT_DEACTIVATED;
-        };
+                student.getDisabilityType(),
+                student.getPhone(),
+                student.getSchoolEmail(),
+                student.getKakaoId(),
+                account.getLoginId(),
+                account.isAccessibilityMode(),
+                student.getCreatedAt(),
+                student.getCredentialMailStatus(),
+                student.getSpecialNote());
     }
 
     private AdminStudentSummaryResponseDto toSummary(Student student, LocalDateTime recentRequestAt,

@@ -19,7 +19,6 @@ import com.hankkiatti.domain.admin.entity.AdminGrade;
 import com.hankkiatti.domain.admin.repository.AdminRepository;
 import com.hankkiatti.domain.application.entity.Application;
 import com.hankkiatti.domain.application.entity.ApplicationStatus;
-import com.hankkiatti.domain.application.entity.CancelReason;
 import com.hankkiatti.domain.application.repository.ApplicationRepository;
 import com.hankkiatti.domain.auth.exception.AuthErrorType;
 import com.hankkiatti.domain.auth.exception.AuthException;
@@ -36,8 +35,6 @@ import com.hankkiatti.domain.student.dto.request.AdminStudentUpdateRequestDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentAccountStatusResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentCreateResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentCredentialMailResponseDto;
-import com.hankkiatti.domain.student.dto.response.AdminStudentDetailResponseDto;
-import com.hankkiatti.domain.student.dto.response.AdminStudentIncidentType;
 import com.hankkiatti.domain.student.dto.response.AdminStudentInfoResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentSummaryResponseDto;
 import com.hankkiatti.domain.student.entity.CredentialMailStatus;
@@ -63,9 +60,11 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
-@ExtendWith(MockitoExtension.class)
+@ExtendWith({MockitoExtension.class, OutputCaptureExtension.class})
 class AdminStudentServiceTest {
 
     private static final Long ADMIN_ID = 1L;
@@ -254,98 +253,6 @@ class AdminStudentServiceTest {
     }
 
     @Test
-    void getStudent_전체권한관리자_원본정보와매칭현황과취소노쇼이력을조회한다() {
-        // given
-        givenFullAdmin();
-        Student student = student(studentAccount(10L));
-        Helper helper = helper(20L);
-        LocalDateTime now = LocalDateTime.of(2026, 10, 5, 10, 0);
-
-        HelpRequest withdrawn = helpRequest(student, 101L, now.plusDays(1));
-        withdrawn.withdraw(now.plusMinutes(1));
-        HelpRequest studentCanceled = helpRequest(student, 102L, now.plusDays(2));
-        studentCanceled.match(now);
-        studentCanceled.cancelByStudent(now.plusMinutes(2));
-        HelpRequest deactivated = helpRequest(student, 103L, now.plusDays(3));
-        deactivated.cancelByDeactivation(now.plusMinutes(3));
-        HelpRequest noShow = helpRequest(student, 104L, now.plusDays(4));
-        noShow.match(now);
-        noShow.complete(now.plusHours(1));
-        noShow.reportNoShow(now.plusHours(2));
-        HelpRequest helperCanceled = helpRequest(student, 105L, now.plusDays(5));
-        helperCanceled.match(now);
-        Application application = new Application(helperCanceled, helper, now);
-        ReflectionTestUtils.setField(application, "id", 201L);
-        application.match(now);
-        application.cancelByHelper(CancelReason.OTHER, "개인 사정", now.plusHours(3));
-
-        List<HelpRequest> requests = List.of(helperCanceled, noShow, deactivated, studentCanceled, withdrawn);
-        given(studentRepository.findWithAccountByAccountId(10L)).willReturn(Optional.of(student));
-        given(helpRequestRepository.findByStudentAccountIdOrderByStartAtDescIdDesc(10L)).willReturn(requests);
-        given(applicationRepository.findWithHelperByHelpRequestIdIn(any())).willReturn(List.of(application));
-
-        // when
-        AdminStudentDetailResponseDto result = adminStudentService.getStudent(ADMIN_ID, 10L);
-
-        // then
-        assertThat(result.information().phone()).isEqualTo("010-1234-5678");
-        assertThat(result.information().schoolEmail()).isEqualTo("student@mju.ac.kr");
-        assertThat(result.information().disabilityType()).isEqualTo(DisabilityType.PHYSICAL);
-        assertThat(result.information().recentRequestAt()).isEqualTo(helperCanceled.getStartAt());
-        assertThat(result.matchingHistory()).hasSize(5);
-        assertThat(result.matchingHistory().get(0).applications()).singleElement().satisfies(item -> {
-            assertThat(item.applicationId()).isEqualTo(201L);
-            assertThat(item.helperName()).isEqualTo("이도우미");
-        });
-        assertThat(result.incidentHistory()).extracting("type").containsExactly(
-                AdminStudentIncidentType.HELPER_CANCELED,
-                AdminStudentIncidentType.NO_SHOW,
-                AdminStudentIncidentType.ACCOUNT_DEACTIVATED,
-                AdminStudentIncidentType.STUDENT_CANCELED,
-                AdminStudentIncidentType.REQUEST_WITHDRAWN);
-        assertThat(result.incidentHistory().get(0).cancelReason()).isEqualTo(CancelReason.OTHER);
-        assertThat(result.incidentHistory().get(0).cancelReasonDetail()).isEqualTo("개인 사정");
-    }
-
-    @Test
-    void getStudent_제한권한관리자_민감한정보를제외한다() {
-        // given
-        given(adminRepository.findById(ADMIN_ID)).willReturn(Optional.of(admin(AdminGrade.LIMITED)));
-        Student student = student(studentAccount(10L));
-        given(studentRepository.findWithAccountByAccountId(10L)).willReturn(Optional.of(student));
-        given(helpRequestRepository.findByStudentAccountIdOrderByStartAtDescIdDesc(10L)).willReturn(List.of());
-
-        // when
-        AdminStudentDetailResponseDto result = adminStudentService.getStudent(ADMIN_ID, 10L);
-
-        // then
-        assertThat(result.information().name()).isEqualTo("김한끼");
-        assertThat(result.information().studentNo()).isEqualTo("60261234");
-        assertThat(result.information().status()).isEqualTo(AccountStatus.ACTIVE);
-        assertThat(result.information().phone()).isNull();
-        assertThat(result.information().kakaoId()).isNull();
-        assertThat(result.information().schoolEmail()).isNull();
-        assertThat(result.information().disabilityType()).isNull();
-        assertThat(result.information().specialNote()).isNull();
-        assertThat(result.information().credentialMailStatus()).isNull();
-        assertThat(result.matchingHistory()).isEmpty();
-        assertThat(result.incidentHistory()).isEmpty();
-        verify(applicationRepository, never()).findWithHelperByHelpRequestIdIn(any());
-    }
-
-    @Test
-    void getStudent_없는학생_NOT_FOUND() {
-        // given
-        givenFullAdmin();
-        given(studentRepository.findWithAccountByAccountId(99L)).willReturn(Optional.empty());
-
-        // when & then
-        assertThatThrownBy(() -> adminStudentService.getStudent(ADMIN_ID, 99L))
-                .isInstanceOf(StudentException.class)
-                .extracting("errorCode").isEqualTo(StudentErrorType.NOT_FOUND);
-    }
-
-    @Test
     void update_전체권한관리자_학생정보를정규화해수정한다() {
         // given
         givenFullAdmin();
@@ -358,8 +265,6 @@ class AdminStudentServiceTest {
                 DisabilityType.HEARING,
                 " 보청기 사용 ");
         given(studentRepository.findByIdForUpdate(10L)).willReturn(Optional.of(student));
-        given(helpRequestRepository.findRecentRequestAtByStudentIds(List.of(10L))).willReturn(List.of());
-
         // when
         AdminStudentInfoResponseDto result = adminStudentService.update(ADMIN_ID, 10L, request);
 
@@ -450,8 +355,8 @@ class AdminStudentServiceTest {
         given(helpRequestRepository.findActiveIdsByStudentAccountId(10L)).willReturn(List.of(101L, 102L));
         given(helpRequestRepository.findByIdForUpdate(101L)).willReturn(Optional.of(recruiting));
         given(helpRequestRepository.findByIdForUpdate(102L)).willReturn(Optional.of(matched));
-        given(applicationRepository.findActiveByHelpRequestIdForUpdate(101L)).willReturn(List.of());
-        given(applicationRepository.findActiveByHelpRequestIdForUpdate(102L))
+        given(applicationRepository.findActiveForUpdate(101L)).willReturn(List.of());
+        given(applicationRepository.findActiveForUpdate(102L))
                 .willReturn(List.of(matchedApplication, waitingApplication));
 
         // when
@@ -473,9 +378,9 @@ class AdminStudentServiceTest {
         lockOrder.verify(studentRepository).findByIdForUpdate(10L);
         lockOrder.verify(helpRequestRepository).findActiveIdsByStudentAccountId(10L);
         lockOrder.verify(helpRequestRepository).findByIdForUpdate(101L);
-        lockOrder.verify(applicationRepository).findActiveByHelpRequestIdForUpdate(101L);
+        lockOrder.verify(applicationRepository).findActiveForUpdate(101L);
         lockOrder.verify(helpRequestRepository).findByIdForUpdate(102L);
-        lockOrder.verify(applicationRepository).findActiveByHelpRequestIdForUpdate(102L);
+        lockOrder.verify(applicationRepository).findActiveForUpdate(102L);
     }
 
     @Test
@@ -553,11 +458,27 @@ class AdminStudentServiceTest {
         given(accountRepository.saveAndFlush(any(Account.class)))
                 .willThrow(new DataIntegrityViolationException("Duplicate entry for key 'login_id'"));
 
-        // when & then
+        // when & then — detail은 로그에 남으므로 학번을 넣지 않는다
         assertThatThrownBy(() -> adminStudentService.create(ADMIN_ID, request()))
                 .isInstanceOf(StudentException.class)
+                .satisfies(e -> assertThat(((StudentException) e).getDetail()).doesNotContain("60261234"))
                 .extracting("errorCode").isEqualTo(StudentErrorType.REGISTRATION_CONFLICT);
         verify(mailOutboxService, never()).enqueue(any(), anyString(), anyString(), anyString(), any());
+    }
+
+    @Test
+    void create_등록로그_학번없이계정ID만남긴다(CapturedOutput output) {
+        // given
+        givenFullAdmin();
+        given(passwordEncoder.encode(anyString())).willReturn("encoded-temporary-password");
+        givenSavedAccountGetsId(10L);
+
+        // when
+        adminStudentService.create(ADMIN_ID, request());
+
+        // then
+        assertThat(output.getOut()).contains("장애학생 등록: accountId=10");
+        assertThat(output.getOut()).doesNotContain("60261234");
     }
 
     @Test

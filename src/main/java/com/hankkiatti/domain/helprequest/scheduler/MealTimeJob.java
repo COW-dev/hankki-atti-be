@@ -28,6 +28,9 @@ public class MealTimeJob {
     private final PromotionResponseService promotionResponseService;
 
     public void processDue(LocalDateTime now) {
+        // 식사 30분 전까지 응답하지 않은 승격에 한 번 더 알린다
+        applicationRepository.findIdsToRemindPromotion(now, BATCH_SIZE)
+                .forEach(id -> runSafely("승격 응답 재알림", id, it -> promotionResponseService.remindUnanswered(it, now)));
         // 응답 마감(식사 15분 전)이 지난 승격을 거절로 처리하고 다음 예비를 승격한다
         applicationRepository.findIdsPromotionExpired(now, BATCH_SIZE)
                 .forEach(id -> runSafely("승격 응답 마감", id, it -> promotionResponseService.expireUnanswered(it, now)));

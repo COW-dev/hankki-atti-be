@@ -191,6 +191,16 @@ class HelpRequestTest {
     }
 
     @Test
+    void cancelByStudent_식사시작시각_예외() {
+        // given
+        HelpRequest request = matchedRequest();
+
+        // when & then
+        assertInvalidStatus(() -> request.cancelByStudent(START));
+        assertThat(request.getStatus()).isEqualTo(HelpRequestStatus.MATCHED);
+    }
+
+    @Test
     void cancelByDeactivation_모집중_계정비활성화로취소() {
         // given
         HelpRequest request = newRequest();

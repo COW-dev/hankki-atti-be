@@ -32,7 +32,8 @@ class OverlappingWaitExcluderTest {
         willThrow(new CannotAcquireLockException("lock timeout")).given(exclusionService).excludeOne(42L, 7L);
 
         // when
-        excluder.onHelperConfirmed(new HelperConfirmedEvent(7L, 10L, NOON, NOON.plusHours(1)));
+        excluder.onHelperConfirmed(new HelperConfirmedEvent(7L, 10L, 31L, NOON, NOON.plusHours(1),
+                HelperConfirmedEvent.Kind.DIRECT_MATCH));
 
         // then
         verify(exclusionService).excludeOne(41L, 7L);

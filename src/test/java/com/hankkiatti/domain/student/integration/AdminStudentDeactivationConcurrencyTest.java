@@ -21,6 +21,10 @@ import com.hankkiatti.domain.helprequest.entity.HelpRequest;
 import com.hankkiatti.domain.helprequest.entity.HelpRequestStatus;
 import com.hankkiatti.domain.helprequest.entity.HelpType;
 import com.hankkiatti.domain.helprequest.repository.HelpRequestRepository;
+import com.hankkiatti.domain.mail.repository.MailOutboxRepository;
+import com.hankkiatti.domain.notification.repository.NotificationJobRepository;
+import com.hankkiatti.domain.notification.repository.NotificationRepository;
+import com.hankkiatti.domain.sms.repository.SmsOutboxRepository;
 import com.hankkiatti.domain.student.dto.response.AdminStudentAccountStatusResponseDto;
 import com.hankkiatti.domain.student.entity.Student;
 import com.hankkiatti.domain.student.repository.StudentRepository;
@@ -71,6 +75,18 @@ class AdminStudentDeactivationConcurrencyTest {
     private ApplicationRepository applicationRepository;
 
     @Autowired
+    private NotificationRepository notificationRepository;
+
+    @Autowired
+    private NotificationJobRepository notificationJobRepository;
+
+    @Autowired
+    private MailOutboxRepository mailOutboxRepository;
+
+    @Autowired
+    private SmsOutboxRepository smsOutboxRepository;
+
+    @Autowired
     private Clock clock;
 
     private Long adminId;
@@ -104,6 +120,10 @@ class AdminStudentDeactivationConcurrencyTest {
 
     @AfterEach
     void tearDown() {
+        notificationJobRepository.deleteAll();
+        notificationRepository.deleteAll();
+        mailOutboxRepository.deleteAll();
+        smsOutboxRepository.deleteAll();
         applicationRepository.deleteAll();
         helpRequestRepository.deleteAll();
         helperRepository.deleteById(helperId);

@@ -9,6 +9,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import com.hankkiatti.domain.account.entity.AccountRole;
 import com.hankkiatti.domain.application.dto.request.HelperCancelRequestDto;
 import com.hankkiatti.domain.application.dto.response.HelperCancelResponseDto;
+import com.hankkiatti.domain.application.dto.response.MyApplicationResponseDto;
 import com.hankkiatti.domain.application.entity.Application;
 import com.hankkiatti.domain.application.entity.ApplicationAfterAction;
 import com.hankkiatti.domain.application.entity.ApplicationStatus;
@@ -21,6 +22,7 @@ import com.hankkiatti.domain.helper.entity.Helper;
 import com.hankkiatti.domain.helper.repository.HelperRepository;
 import com.hankkiatti.domain.helprequest.entity.HelpRequest;
 import com.hankkiatti.domain.helprequest.entity.HelpRequestStatus;
+import com.hankkiatti.domain.helprequest.event.HelpRequestReopenedEvent;
 import com.hankkiatti.domain.helprequest.repository.HelpRequestRepository;
 import com.hankkiatti.domain.student.entity.Student;
 import com.hankkiatti.support.TestAccounts;
@@ -148,10 +150,12 @@ class HelperCancelServiceTest {
         assertThat(mine.getAfterAction()).isEqualTo(ApplicationAfterAction.PROMOTED);
         assertThat(waitingFirst.getStatus()).isEqualTo(ApplicationStatus.MATCHED);
         assertThat(waitingFirst.getPromotedAt()).isEqualTo(NOW);
+        assertThat(waitingFirst.getPromotedWaitingOrder()).isEqualTo(1);
         assertThat(waitingSecond.getStatus()).isEqualTo(ApplicationStatus.WAITING);
         assertThat(request.getStatus()).isEqualTo(HelpRequestStatus.MATCHED);
         assertThat(request.isHelperChanged()).isTrue();
-        verify(eventPublisher).publishEvent(new HelperConfirmedEvent(8L, REQUEST_ID, NOON, NOON.plusHours(1)));
+        verify(eventPublisher).publishEvent(new HelperConfirmedEvent(8L, REQUEST_ID, 41L, NOON, NOON.plusHours(1),
+                HelperConfirmedEvent.Kind.PROMOTED));
     }
 
     @Test
@@ -167,7 +171,7 @@ class HelperCancelServiceTest {
         assertThat(mine.getAfterAction()).isEqualTo(ApplicationAfterAction.REOPENED);
         assertThat(request.getStatus()).isEqualTo(HelpRequestStatus.RECRUITING);
         assertThat(request.isHelperChanged()).isFalse();
-        verifyNoInteractions(eventPublisher);
+        verify(eventPublisher).publishEvent(new HelpRequestReopenedEvent(REQUEST_ID));
     }
 
     @Test
@@ -189,6 +193,8 @@ class HelperCancelServiceTest {
         // then
         assertThat(waitingFirst.getStatus()).isEqualTo(ApplicationStatus.EXCLUDED);
         assertThat(waitingSecond.getStatus()).isEqualTo(ApplicationStatus.MATCHED);
+        // 앞 예비가 자동 제외돼 승격 당시 순번은 2번
+        assertThat(waitingSecond.getPromotedWaitingOrder()).isEqualTo(2);
         assertThat(mine.getAfterAction()).isEqualTo(ApplicationAfterAction.PROMOTED);
     }
 
@@ -280,5 +286,63 @@ class HelperCancelServiceTest {
         assertApplicationError(() -> helperCancelService.cancel(7L, MY_APPLICATION_ID, ILLNESS),
                 ApplicationErrorType.MEAL_STARTED);
         assertThat(mine.getStatus()).isEqualTo(ApplicationStatus.MATCHED);
+    }
+
+    // 내 예비 지원을 잠근 상태까지
+    private Application givenMyWaitingLocked() {
+        Application waiting = application(51L, request, me);
+        given(applicationRepository.findHelpRequestIdByIdAndHelperId(51L, 7L)).willReturn(Optional.of(REQUEST_ID));
+        given(helpRequestRepository.findByIdForUpdate(REQUEST_ID)).willReturn(Optional.of(request));
+        given(applicationRepository.findByIdForUpdate(51L)).willReturn(Optional.of(waiting));
+        return waiting;
+    }
+
+    @Test
+    void leave_예비_빠짐으로바뀌고카드반환() {
+        // given
+        Application waiting = givenMyWaitingLocked();
+
+        // when
+        MyApplicationResponseDto result = helperCancelService.leave(7L, 51L);
+
+        // then
+        assertThat(waiting.getStatus()).isEqualTo(ApplicationStatus.WITHDRAWN);
+        assertThat(waiting.getCanceledAt()).isEqualTo(NOW);
+        assertThat(result.status()).isEqualTo(ApplicationStatus.WITHDRAWN);
+        assertThat(result.student()).isNull();
+        assertThat(result.waitingOrder()).isNull();
+        verifyNoInteractions(eventPublisher);
+    }
+
+    @Test
+    void leave_그사이승격돼응답대기_INVALID_STATUS() {
+        // given
+        Application waiting = givenMyWaitingLocked();
+        waiting.promote(NOW, NOON.minusMinutes(15), null, 1);
+
+        // when & then
+        assertApplicationError(() -> helperCancelService.leave(7L, 51L), ApplicationErrorType.INVALID_STATUS);
+        assertThat(waiting.getStatus()).isEqualTo(ApplicationStatus.PROMOTION_PENDING);
+    }
+
+    @Test
+    void leave_매칭완료_INVALID_STATUS() {
+        // given
+        givenMyApplicationLocked();
+
+        // when & then
+        assertApplicationError(() -> helperCancelService.leave(7L, MY_APPLICATION_ID),
+                ApplicationErrorType.INVALID_STATUS);
+        assertThat(mine.getStatus()).isEqualTo(ApplicationStatus.MATCHED);
+    }
+
+    @Test
+    void leave_남의지원_NOT_FOUND() {
+        // given
+        given(applicationRepository.findHelpRequestIdByIdAndHelperId(51L, 7L)).willReturn(Optional.empty());
+
+        // when & then
+        assertApplicationError(() -> helperCancelService.leave(7L, 51L), ApplicationErrorType.NOT_FOUND);
+        verifyNoInteractions(helpRequestRepository);
     }
 }

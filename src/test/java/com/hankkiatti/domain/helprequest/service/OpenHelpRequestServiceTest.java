@@ -111,7 +111,7 @@ class OpenHelpRequestServiceTest {
 
     private Application promotionPendingOn(HelpRequest request) {
         Application application = waitingOn(request);
-        application.promote(NOW.minusHours(1), NOW.minusHours(1).plusMinutes(30));
+        application.promote(NOW.minusHours(1), NOW.minusHours(1).plusMinutes(30), null, 1);
         return application;
     }
 

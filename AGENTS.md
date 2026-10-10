@@ -105,11 +105,12 @@ domain/
 ├── auth/         RefreshToken, PasswordResetToken, TokenAudience, 로그인·토큰·비밀번호 변경·재설정 API
 ├── mail/         MailOutbox, 메일 아웃박스 적재·발송(MailOutboxService, MailRelay)
 ├── sms/          SmsOutbox, 문자 아웃박스 적재·발송(SmsOutboxService, SmsRelay), 발송부 SmsSender(AWS SNS 구현 SnsSmsSender)
-├── student/      Student, DisabilityType, CredentialMailStatus
+├── notification/ Notification, NotificationType, NotificationTargetType, 인앱 알림 저장(NotificationService.notify)·목록(커서)·안 읽은 개수·읽음 API, 매칭·취소 이벤트 → 알림 작업 아웃박스(NotificationJob — NotificationJobRecorder가 업무 트랜잭션 안에서 저장 → NotificationJobRelay·Poller가 처리 → NotificationDispatcher, 문구는 `messages/notification.properties` — 키 = 알림 종류, NotificationMessages가 채운다)
+├── student/      Student, DisabilityType, CredentialMailStatus, 관리자 장애학생 등록(AdminStudentService), 장애학생 상세 3탭 — 정보·매칭현황·취소·노쇼 이력(AdminStudentDetailService, 등급별 프로필 DTO)
 ├── helper/       Helper, 도우미 회원가입(HelperSignupService, 공개 경로 `/api/helpers/signup`)
 ├── admin/        Admin, AdminGrade
-├── helprequest/  HelpRequest, HelpType, HelpRequestStatus, RequestCancelType, Meal, 신청 가능 날짜·시각(HelpRequestSchedule), 식사 시작·종료 자동 처리(MealTimeJob)
-└── application/  Application, ApplicationStatus(ACTIVE·CONFIRMED), CancelReason, ApplicationAfterAction, 지원(ApplicationService), 도우미 매칭 취소(HelperCancelService), 다음 예비 승격·모집 재개(WaitingPromoter — 취소·승격 거절·응답 마감이 같이 씀), 식사 1시간 이내 승격의 수락·거절·응답 마감 자동 거절(PromotionResponseService), 매칭 현황 조회(MyApplicationService, MyApplicationFilter), 확정 매칭 시 겹치는 다른 예비 자동 제외(HelperConfirmedEvent → OverlappingWaitExcluder), 지원 가능 규칙(ApplyPolicy — 요청 목록 카드·지원 검증·승격 후보 확인이 같이 씀), 지원 결과 예상 ApplyOutcome·ApplyBlockReason(저장 안 함)
+├── helprequest/  HelpRequest, HelpType, HelpRequestStatus, RequestCancelType, Meal, 신청 가능 날짜·시각(HelpRequestSchedule), 신청·철회·장애학생 매칭 취소·노쇼 신고(HelpRequestService — 매칭 취소는 HelpRequestCanceledByStudentEvent 발행), 관리자 전체 신청 현황·요약(AdminHelpRequestService — 등급별 DTO), 조회 기간 규칙(HelpRequestDateRange), 식사 시작·종료 자동 처리(MealTimeJob)
+└── application/  Application, ApplicationStatus(ACTIVE·CONFIRMED), CancelReason, ApplicationAfterAction, 지원(ApplicationService), 도우미 매칭 취소·예비 빠지기(HelperCancelService), 다음 예비 승격·모집 재개(WaitingPromoter — 취소·승격 거절·응답 마감이 같이 씀), 식사 1시간 이내 승격의 수락·거절·응답 마감 자동 거절(PromotionResponseService), 매칭 현황 조회(MyApplicationService, MyApplicationFilter), 확정 매칭 시 겹치는 다른 예비 자동 제외(HelperConfirmedEvent → OverlappingWaitExcluder), 지원 가능 규칙(ApplyPolicy — 요청 목록 카드·지원 검증·승격 후보 확인이 같이 씀), 지원 결과 예상 ApplyOutcome·ApplyBlockReason(저장 안 함)
 ```
 - `Student`·`Helper`·`Admin`은 `Account`와 PK를 공유하는 1:1 프로필이다 (`@MapsId`)
 
@@ -185,6 +186,7 @@ DomainException (abstract, global)
   3. `throw new XxxException(XxxErrorType.XXX)` 사용
 - `GlobalExceptionHandler`에 새 예외 타입을 추가할 필요 없음 — `DomainException` 핸들러가 자동 처리
 - 내부 식별자 등 디버그 정보는 `detail` 인자로 넘긴다 (로그에만 남고 응답에는 노출되지 않음)
+- 로그와 `detail`에는 ID·상태·종류만 적는다. 이름·학번·연락처·이메일·장애 정보·메모는 적지 않는다 (장애학생의 학번만 남아도 "이 학번은 장애학생"이 드러난다). DB·JSON·외부 서비스 예외의 메시지는 입력값이 들어갈 수 있으니 그대로 찍지 않는다 — `GlobalExceptionHandler`는 제약 이름·필드 경로만 남긴다
 
 ```java
 // 올바른 예
@@ -316,6 +318,8 @@ public class HelpRequest extends BaseTimeEntity {
   - 수신자·본문은 로그에 남기지 않는다 (아웃박스 id·종류만)
 - 문자는 `SmsOutboxService.enqueue(...)`로 아웃박스에 적는다. 메일과 같은 흐름(커밋 후 발송·재시도·`SmsFailedEvent`)이고, 발송부는 `SmsSender` 인터페이스라 발신 서비스를 바꿀 때 구현체만 교체한다. 문자가 주 알림 채널이지만 메일도 쓸 수 있으니 두 모듈을 합치거나 없애지 않는다
   - 전화번호는 저장 형식(010-1234-5678)으로 넘기면 E.164(+821012345678)로 바꿔 보낸다. 본문은 `[한끼아띠]`로 시작, 45자 안팎, 링크 없음
+- 인앱 알림은 업무 서비스가 직접 쌓지 않는다. 업무 트랜잭션 안에서 이벤트(`HelperConfirmedEvent`·`HelpRequestFailedEvent` 등)를 발행하면 `NotificationJobRecorder`가 **같은 트랜잭션에서** 알림 작업(`notification_jobs`)을 저장한다 — 업무가 커밋되면 작업도 반드시 남고, 롤백되면 같이 사라진다. 커밋 직후 같은 스레드에서 `NotificationJobRelay`가 선점해 처리하고, 놓치거나 실패한 작업은 `NotificationJobPoller`가 10초마다 다시 처리한다 (1분 간격 3번 재시도 → FAILED, 메일 아웃박스와 같은 방식). 처리(`NotificationDispatcher`)는 알림 쌓기와 작업 완료를 한 트랜잭션에서 해 중복이 없다. 새 알림 종류는 이벤트 + `NotificationJobType` + Recorder·Dispatcher 처리 + `notification.properties` 문구(+ `NotificationMessages` 메서드)를 더한다
+  - 급한 알림 4종(매칭 완료·예비에서 승격·상대방 취소·매칭 실패)은 같은 트랜잭션에서 `NotificationOutboxSender`가 메일·문자 아웃박스에도 적재한다 (메일·문자 문구도 `notification.properties`). 어떤 종류를 메일·문자로 보낼지는 `NotificationOutboxSender`의 매핑 한 곳에서 정한다
 - 예약 작업은 `@Scheduled`로 만든다. 스케줄러 스레드는 4개(`spring.task.scheduling.pool.size`) — 한 작업이 오래 걸려도 다른 작업이 밀리지 않게 작업 안에서 오래 막히는 호출을 피한다
 - 비동기 작업은 용도별 스레드 풀을 따로 둔다 (`@Async("mailExecutor")`처럼 이름 지정). 이름 없는 `@Async`는 쓰지 않는다
 - 서버가 여러 대일 수 있으므로 예약 작업은 같은 대상을 두 서버가 동시에 처리해도 안전해야 한다 (조건부 UPDATE로 선점 등)
