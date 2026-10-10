@@ -4,6 +4,8 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.inOrder;
 
+import com.hankkiatti.domain.application.repository.ApplicationRepository;
+import com.hankkiatti.domain.application.service.PromotionResponseService;
 import com.hankkiatti.domain.helprequest.repository.HelpRequestRepository;
 import com.hankkiatti.domain.helprequest.service.MealTimeService;
 import java.time.LocalDateTime;
@@ -25,14 +27,21 @@ class MealTimeJobTest {
     private HelpRequestRepository helpRequestRepository;
 
     @Mock
+    private ApplicationRepository applicationRepository;
+
+    @Mock
     private MealTimeService mealTimeService;
+
+    @Mock
+    private PromotionResponseService promotionResponseService;
 
     @InjectMocks
     private MealTimeJob mealTimeJob;
 
     @Test
-    void processDue_시작처리후종료처리_한건이실패해도나머지계속() {
+    void processDue_승격마감후시작후종료처리_한건이실패해도나머지계속() {
         // given
+        given(applicationRepository.findIdsPromotionExpired(NOW, 200)).willReturn(List.of(7L));
         given(helpRequestRepository.findIdsToStart(NOW, 200)).willReturn(List.of(1L, 2L));
         given(helpRequestRepository.findIdsToComplete(NOW, 200)).willReturn(List.of(3L));
         willThrow(new CannotAcquireLockException("lock wait timeout")).given(mealTimeService).startMeal(1L, NOW);
@@ -41,7 +50,8 @@ class MealTimeJobTest {
         mealTimeJob.processDue(NOW);
 
         // then
-        InOrder order = inOrder(mealTimeService);
+        InOrder order = inOrder(promotionResponseService, mealTimeService);
+        order.verify(promotionResponseService).expireUnanswered(7L, NOW);
         order.verify(mealTimeService).startMeal(1L, NOW);
         order.verify(mealTimeService).startMeal(2L, NOW);
         order.verify(mealTimeService).completeMeal(3L, NOW);

@@ -75,8 +75,10 @@ class HelperCancelServiceTest {
     @BeforeEach
     void setUp() {
         Clock clock = Clock.fixed(NOW.atZone(SEOUL).toInstant(), SEOUL);
-        helperCancelService = new HelperCancelService(applicationRepository, helpRequestRepository, helperRepository,
-                new ApplyPolicy(), eventPublisher, clock);
+        WaitingPromoter waitingPromoter = new WaitingPromoter(applicationRepository, helperRepository, new ApplyPolicy(),
+                eventPublisher);
+        helperCancelService = new HelperCancelService(applicationRepository, helpRequestRepository, waitingPromoter,
+                clock);
         request = request(REQUEST_ID, NOON);
         request.match(NOW.minusDays(1));
         mine = application(MY_APPLICATION_ID, request, me);

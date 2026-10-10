@@ -30,6 +30,8 @@ public class MealTimeService {
 
     /**
      * 식사 시작: 지원자가 없는 신청은 매칭 실패, 승격되지 못한 예비는 예비 종료.
+     * 승격된 도우미가 식사 시작까지 응답하지 않았으면 그 승격은 거절로 끝내고, 확정된 도우미가 없으니 신청도 매칭 실패다
+     * (식사 15분 전보다 늦게 승격된 경우, 2026-10-10 결정).
      */
     @Transactional
     public void startMeal(Long helpRequestId, LocalDateTime now) {
@@ -38,10 +40,16 @@ public class MealTimeService {
             return;
         }
 
+        List<Application> unanswered =
+                applicationRepository.findByHelpRequestIdAndStatus(helpRequestId, ApplicationStatus.PROMOTION_PENDING);
+        unanswered.forEach(application -> application.declinePromotion(now));
         if (request.getStatus() == HelpRequestStatus.RECRUITING) {
             request.fail();
-            eventPublisher.publishEvent(new HelpRequestFailedEvent(
-                    request.getId(), request.getStudent().getAccountId(), request.getStartAt()));
+            publishFailed(request);
+        } else if (request.getStatus() == HelpRequestStatus.MATCHED && !unanswered.isEmpty()) {
+            request.failUnanswered();
+            log.info("승격 응답 없이 식사 시작 → 매칭 실패: helpRequestId={}", helpRequestId);
+            publishFailed(request);
         }
         // 예비 종료는 알림을 보내지 않는다 (기능명세서)
         applicationRepository.findByHelpRequestIdAndStatus(helpRequestId, ApplicationStatus.WAITING)
@@ -65,5 +73,10 @@ public class MealTimeService {
             log.warn("매칭된 지원이 없는 매칭 완료 신청을 이용 완료로 처리: helpRequestId={}", helpRequestId);
         }
         matched.forEach(Application::complete);
+    }
+
+    private void publishFailed(HelpRequest request) {
+        eventPublisher.publishEvent(new HelpRequestFailedEvent(
+                request.getId(), request.getStudent().getAccountId(), request.getStartAt()));
     }
 }

@@ -47,12 +47,12 @@ public class MyApplicationService {
         List<MyApplicationResponseDto> inProgress = mine.stream()
                 .filter(Application::isActive)
                 .sorted(BY_START_AT)
-                .map(application -> toResponse(application, waitingOrders.get(application.getId())))
+                .map(application -> toCard(application, waitingOrders.get(application.getId())))
                 .toList();
         List<MyApplicationResponseDto> past = mine.stream()
                 .filter(application -> !application.isActive())
                 .sorted(BY_START_AT.reversed())
-                .map(application -> toResponse(application, null))
+                .map(application -> toCard(application, null))
                 .toList();
         return new MyApplicationsResponseDto(inProgress, past);
     }
@@ -81,7 +81,8 @@ public class MyApplicationService {
         return orders;
     }
 
-    private MyApplicationResponseDto toResponse(Application application, Integer waitingOrder) {
+    // 매칭 현황 카드. 승격 응답(수락·거절)도 바뀐 지원을 이 모양으로 돌려준다
+    static MyApplicationResponseDto toCard(Application application, Integer waitingOrder) {
         HelpRequest request = application.getHelpRequest();
         ApplicationStatus status = application.getStatus();
         ApplyStudentResponseDto student = null;
@@ -91,7 +92,9 @@ public class MyApplicationService {
         }
         return new MyApplicationResponseDto(application.getId(), request.getId(), status,
                 request.getStartAt(), request.getEndAt(), request.getHelpTypes().stream().sorted().toList(),
-                waitingOrder, student,
+                waitingOrder,
+                status == ApplicationStatus.PROMOTION_PENDING ? application.getPromotionDeadline() : null,
+                student,
                 status == ApplicationStatus.HELPER_CANCELED ? application.getCancelReason() : null,
                 application.getVolunteerHours());
     }

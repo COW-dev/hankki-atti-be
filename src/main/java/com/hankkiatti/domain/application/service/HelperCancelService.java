@@ -6,19 +6,15 @@ import com.hankkiatti.domain.application.entity.Application;
 import com.hankkiatti.domain.application.entity.ApplicationAfterAction;
 import com.hankkiatti.domain.application.entity.ApplicationStatus;
 import com.hankkiatti.domain.application.entity.CancelReason;
-import com.hankkiatti.domain.application.event.HelperConfirmedEvent;
 import com.hankkiatti.domain.application.exception.ApplicationErrorType;
 import com.hankkiatti.domain.application.exception.ApplicationException;
 import com.hankkiatti.domain.application.repository.ApplicationRepository;
-import com.hankkiatti.domain.helper.repository.HelperRepository;
 import com.hankkiatti.domain.helprequest.entity.HelpRequest;
 import com.hankkiatti.domain.helprequest.repository.HelpRequestRepository;
 import java.time.Clock;
 import java.time.LocalDateTime;
-import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,9 +31,7 @@ public class HelperCancelService {
 
     private final ApplicationRepository applicationRepository;
     private final HelpRequestRepository helpRequestRepository;
-    private final HelperRepository helperRepository;
-    private final ApplyPolicy applyPolicy;
-    private final ApplicationEventPublisher eventPublisher;
+    private final WaitingPromoter waitingPromoter;
     private final Clock clock;
 
     /**
@@ -55,7 +49,7 @@ public class HelperCancelService {
                 .orElseThrow(() -> notFound(applicationId, helperId));
 
         if (application.getStatus() != ApplicationStatus.MATCHED) {
-            // 승격 응답 대기의 거절은 승격 응답 API(BE-35)로 한다
+            // 승격 응답 대기의 거절은 승격 응답 API(PromotionResponseService)로 한다
             throw new ApplicationException(ApplicationErrorType.INVALID_STATUS,
                     "applicationId=" + applicationId + ", status=" + application.getStatus());
         }
@@ -69,7 +63,7 @@ public class HelperCancelService {
                 ? requestDto.reasonDetail().trim()
                 : null;
         application.cancelByHelper(requestDto.reason(), detail, now);
-        ApplicationAfterAction afterAction = promoteOrReopen(request, now);
+        ApplicationAfterAction afterAction = waitingPromoter.promoteOrReopen(request, now);
         application.recordAfterAction(afterAction);
 
         // 기타 내용은 로그에 남기지 않는다
@@ -78,41 +72,6 @@ public class HelperCancelService {
         return new HelperCancelResponseDto(application.getId(), request.getId(), application.getStatus(),
                 request.getStartAt(), request.getEndAt(), request.getHelpTypes().stream().sorted().toList(),
                 application.getCancelReason(), application.getCanceledAt());
-    }
-
-    /**
-     * 예비를 지원 순으로 보고, 다른 신청의 확정 매칭과 겹치지 않는 첫 도우미를 승격한다. 겹치는 예비는 자동 제외한다 —
-     * 예비끼리는 겹쳐도 지원할 수 있어서 예비로 있는 사이 다른 건에 매칭된 도우미가 있을 수 있다.
-     * 승격할 사람이 없으면 모집을 다시 연다.
-     */
-    private ApplicationAfterAction promoteOrReopen(HelpRequest request, LocalDateTime now) {
-        List<Application> waiting = applicationRepository.findWaitingForUpdate(request.getId());
-        for (Application candidate : waiting) {
-            Long candidateId = candidate.getHelper().getAccountId();
-            // 후보가 동시에 겹치는 다른 신청에 지원하는 것과 한 줄로 서도록 도우미 행을 잠근 뒤 확인한다
-            helperRepository.findByIdForUpdate(candidateId);
-            List<Application> candidateActive = applicationRepository.findActiveWithHelpRequestByHelperId(candidateId);
-            if (applyPolicy.overlapsConfirmed(request, candidateActive)) {
-                candidate.exclude();
-                log.info("승격 후보 자동 제외(시간 겹침): applicationId={}, helpRequestId={}, helperId={}",
-                        candidate.getId(), request.getId(), candidateId);
-                continue;
-            }
-            promote(request, candidate, now);
-            return ApplicationAfterAction.PROMOTED;
-        }
-        request.reopen();
-        return ApplicationAfterAction.REOPENED;
-    }
-
-    // 식사 1시간 이내 승격을 응답 대기로 두는 분기(요구사항 4.5)는 승격 응답 API·자동 거절과 함께 BE-35에서 여기에 넣는다
-    private void promote(HelpRequest request, Application candidate, LocalDateTime now) {
-        candidate.promote(now, false);
-        request.changeHelper();
-        log.info("예비 승격: applicationId={}, helpRequestId={}", candidate.getId(), request.getId());
-        // 커밋 뒤 승격된 도우미의 겹치는 다른 예비를 자동 제외한다 (BE-32)
-        eventPublisher.publishEvent(new HelperConfirmedEvent(candidate.getHelper().getAccountId(), request.getId(),
-                request.getStartAt(), request.getEndAt()));
     }
 
     private static ApplicationException notFound(Long applicationId, Long helperId) {

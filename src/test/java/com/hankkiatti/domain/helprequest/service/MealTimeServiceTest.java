@@ -63,12 +63,19 @@ class MealTimeServiceTest {
         return application;
     }
 
+    private void givenApplications(Long helpRequestId, List<Application> unanswered, List<Application> waiting) {
+        given(applicationRepository.findByHelpRequestIdAndStatus(helpRequestId, ApplicationStatus.PROMOTION_PENDING))
+                .willReturn(unanswered);
+        given(applicationRepository.findByHelpRequestIdAndStatus(helpRequestId, ApplicationStatus.WAITING))
+                .willReturn(waiting);
+    }
+
     @Test
     void startMeal_모집중인신청_매칭실패하고이벤트발행() {
         // given
         HelpRequest request = request(1L);
         given(helpRequestRepository.findByIdForUpdate(1L)).willReturn(Optional.of(request));
-        given(applicationRepository.findByHelpRequestIdAndStatus(1L, ApplicationStatus.WAITING)).willReturn(List.of());
+        givenApplications(1L, List.of(), List.of());
 
         // when
         mealTimeService.startMeal(1L, LUNCH);
@@ -85,8 +92,7 @@ class MealTimeServiceTest {
         request.match(LUNCH.minusHours(3));
         Application waiting = waiting(request);
         given(helpRequestRepository.findByIdForUpdate(1L)).willReturn(Optional.of(request));
-        given(applicationRepository.findByHelpRequestIdAndStatus(1L, ApplicationStatus.WAITING))
-                .willReturn(List.of(waiting));
+        givenApplications(1L, List.of(), List.of(waiting));
 
         // when
         mealTimeService.startMeal(1L, LUNCH.plusMinutes(1));
@@ -95,6 +101,27 @@ class MealTimeServiceTest {
         assertThat(waiting.getStatus()).isEqualTo(ApplicationStatus.EXPIRED);
         assertThat(request.getStatus()).isEqualTo(HelpRequestStatus.MATCHED);
         verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    void startMeal_승격응답없음_승격거절하고매칭실패와이벤트() {
+        // given — 매칭된 도우미가 11:50에 취소해 예비가 식사 시작까지 응답 대기였다
+        HelpRequest request = request(1L);
+        request.match(LUNCH.minusHours(3));
+        Application pending = waiting(request);
+        pending.promote(LUNCH.minusMinutes(10), LUNCH);
+        Application stillWaiting = waiting(request);
+        given(helpRequestRepository.findByIdForUpdate(1L)).willReturn(Optional.of(request));
+        givenApplications(1L, List.of(pending), List.of(stillWaiting));
+
+        // when
+        mealTimeService.startMeal(1L, LUNCH);
+
+        // then
+        assertThat(pending.getStatus()).isEqualTo(ApplicationStatus.PROMOTION_DECLINED);
+        assertThat(stillWaiting.getStatus()).isEqualTo(ApplicationStatus.EXPIRED);
+        assertThat(request.getStatus()).isEqualTo(HelpRequestStatus.FAILED);
+        verify(eventPublisher).publishEvent(new HelpRequestFailedEvent(1L, 10L, LUNCH));
     }
 
     @Test
@@ -116,7 +143,7 @@ class MealTimeServiceTest {
         HelpRequest request = request(1L);
         request.withdraw(LUNCH.minusMinutes(10));
         given(helpRequestRepository.findByIdForUpdate(1L)).willReturn(Optional.of(request));
-        given(applicationRepository.findByHelpRequestIdAndStatus(1L, ApplicationStatus.WAITING)).willReturn(List.of());
+        givenApplications(1L, List.of(), List.of());
 
         // when
         mealTimeService.startMeal(1L, LUNCH);

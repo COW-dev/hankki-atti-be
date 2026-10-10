@@ -63,11 +63,11 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequest, Long> 
                                          @Param("statuses") List<HelpRequestStatus> statuses);
 
     /**
-     * 식사가 시작됐는데 아직 처리할 게 남은 신청: 모집 중이거나 예비 지원이 남아 있는 신청.
+     * 식사가 시작됐는데 아직 처리할 게 남은 신청: 모집 중이거나 예비·승격 응답 대기 지원이 남아 있는 신청.
      */
     default List<Long> findIdsToStart(LocalDateTime now, int limit) {
-        return findStartedIdsWithPendingWork(now, HelpRequestStatus.RECRUITING, ApplicationStatus.WAITING,
-                PageRequest.of(0, limit));
+        return findStartedIdsWithPendingWork(now, HelpRequestStatus.RECRUITING,
+                List.of(ApplicationStatus.WAITING, ApplicationStatus.PROMOTION_PENDING), PageRequest.of(0, limit));
     }
 
     /**
@@ -81,11 +81,11 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequest, Long> 
             select r.id from HelpRequest r
             where r.startAt <= :now
               and (r.status = :recruiting
-                or exists (select a.id from Application a where a.helpRequest = r and a.status = :waiting))
+                or exists (select a.id from Application a where a.helpRequest = r and a.status in :pending))
             order by r.startAt, r.id""")
     List<Long> findStartedIdsWithPendingWork(@Param("now") LocalDateTime now,
                                              @Param("recruiting") HelpRequestStatus recruiting,
-                                             @Param("waiting") ApplicationStatus waiting,
+                                             @Param("pending") List<ApplicationStatus> pending,
                                              Pageable pageable);
 
     @Query("""

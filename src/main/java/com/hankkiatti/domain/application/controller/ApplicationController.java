@@ -3,11 +3,13 @@ package com.hankkiatti.domain.application.controller;
 import com.hankkiatti.domain.application.dto.request.HelperCancelRequestDto;
 import com.hankkiatti.domain.application.dto.response.ApplyResponseDto;
 import com.hankkiatti.domain.application.dto.response.HelperCancelResponseDto;
+import com.hankkiatti.domain.application.dto.response.MyApplicationResponseDto;
 import com.hankkiatti.domain.application.dto.response.MyApplicationsResponseDto;
 import com.hankkiatti.domain.application.entity.MyApplicationFilter;
 import com.hankkiatti.domain.application.service.ApplicationService;
 import com.hankkiatti.domain.application.service.HelperCancelService;
 import com.hankkiatti.domain.application.service.MyApplicationService;
+import com.hankkiatti.domain.application.service.PromotionResponseService;
 import com.hankkiatti.global.response.ApiResponse;
 import com.hankkiatti.global.response.ApiResult;
 import com.hankkiatti.global.response.type.SuccessType;
@@ -30,6 +32,7 @@ public class ApplicationController implements ApplicationControllerDocs {
     private final ApplicationService applicationService;
     private final HelperCancelService helperCancelService;
     private final MyApplicationService myApplicationService;
+    private final PromotionResponseService promotionResponseService;
 
     @Override
     @PostMapping("/api/help-requests/{helpRequestId}/applications")
@@ -56,5 +59,23 @@ public class ApplicationController implements ApplicationControllerDocs {
             @Valid @RequestBody HelperCancelRequestDto request) {
         return ApiResponse.of(SuccessType.SUCCESS,
                 helperCancelService.cancel(principal.accountId(), applicationId, request));
+    }
+
+    @Override
+    @PostMapping("/api/applications/{applicationId}/promotion/accept")
+    public ResponseEntity<ApiResult<MyApplicationResponseDto>> acceptPromotion(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @PathVariable Long applicationId) {
+        return ApiResponse.of(SuccessType.SUCCESS,
+                promotionResponseService.accept(principal.accountId(), applicationId));
+    }
+
+    @Override
+    @PostMapping("/api/applications/{applicationId}/promotion/decline")
+    public ResponseEntity<ApiResult<MyApplicationResponseDto>> declinePromotion(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @PathVariable Long applicationId) {
+        return ApiResponse.of(SuccessType.SUCCESS,
+                promotionResponseService.decline(principal.accountId(), applicationId));
     }
 }

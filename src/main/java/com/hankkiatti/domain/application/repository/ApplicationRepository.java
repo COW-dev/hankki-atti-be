@@ -8,6 +8,8 @@ import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
@@ -26,6 +28,12 @@ public interface ApplicationRepository extends JpaRepository<Application, Long> 
      */
     @Query("select a.helpRequest.id from Application a where a.id = :id and a.helper.accountId = :helperId")
     Optional<Long> findHelpRequestIdByIdAndHelperId(@Param("id") Long id, @Param("helperId") Long helperId);
+
+    /**
+     * 지원의 신청 ID (승격 응답 마감 자동 처리). 위와 같은 이유로 엔티티가 아니라 값만 읽는다.
+     */
+    @Query("select a.helpRequest.id from Application a where a.id = :id")
+    Optional<Long> findHelpRequestIdById(@Param("id") Long id);
 
     /**
      * 지원 행을 잠그고 가져온다. 신청 행 락 다음에 잡는다 (락 순서: 신청 → 지원 → 도우미).
@@ -122,6 +130,22 @@ public interface ApplicationRepository extends JpaRepository<Application, Long> 
     List<Application> findByHelpRequestIdInAndStatusInApplyOrder(
             @Param("helpRequestIds") Collection<Long> helpRequestIds,
             @Param("status") ApplicationStatus status);
+
+    /**
+     * 응답 마감이 지난 승격 응답 대기의 ID (자동 거절 대상). 마감이 식사 시작인 것은 식사 시작 처리가 맡아 넣지 않는다.
+     */
+    default List<Long> findIdsPromotionExpired(LocalDateTime now, int limit) {
+        return findIdsByStatusAndDeadlinePassed(ApplicationStatus.PROMOTION_PENDING, now, PageRequest.of(0, limit));
+    }
+
+    @Query("""
+            select a.id from Application a
+            where a.status = :status and a.promotionDeadline <= :now
+              and a.promotionDeadline < a.helpRequest.startAt
+            order by a.promotionDeadline, a.id""")
+    List<Long> findIdsByStatusAndDeadlinePassed(@Param("status") ApplicationStatus status,
+                                                @Param("now") LocalDateTime now,
+                                                Pageable pageable);
 
     /**
      * 도우미의 봉사시간 합계. 봉사시간이 기록된 지원(이용 완료 1.0, 노쇼 0)만 더한다. 하나도 없으면 null.
