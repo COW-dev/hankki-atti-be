@@ -62,6 +62,14 @@ public class ApplicationController implements ApplicationControllerDocs {
     }
 
     @Override
+    @PostMapping("/api/applications/{applicationId}/leave")
+    public ResponseEntity<ApiResult<MyApplicationResponseDto>> leave(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @PathVariable Long applicationId) {
+        return ApiResponse.of(SuccessType.SUCCESS, helperCancelService.leave(principal.accountId(), applicationId));
+    }
+
+    @Override
     @PostMapping("/api/applications/{applicationId}/promotion/accept")
     public ResponseEntity<ApiResult<MyApplicationResponseDto>> acceptPromotion(
             @AuthenticationPrincipal AuthPrincipal principal,

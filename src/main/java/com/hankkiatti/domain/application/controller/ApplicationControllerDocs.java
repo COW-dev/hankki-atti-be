@@ -13,7 +13,7 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
 
-@Tag(name = "지원", description = "도우미가 신청에 지원하고 매칭 현황을 보고 매칭을 취소하고 승격에 응답하는 API")
+@Tag(name = "지원", description = "도우미가 신청에 지원하고 매칭 현황을 보고 매칭 취소·예비 빠지기·승격 응답을 하는 API")
 public interface ApplicationControllerDocs {
 
     @Operation(summary = "지원", description = """
@@ -60,6 +60,18 @@ public interface ApplicationControllerDocs {
     ResponseEntity<ApiResult<HelperCancelResponseDto>> cancel(@Parameter(hidden = true) AuthPrincipal principal,
                                                               @Parameter(description = "지원 ID") Long applicationId,
                                                               HelperCancelRequestDto request);
+
+    @Operation(summary = "예비 빠지기", description = """
+            예비(WAITING)인 지원에서 빠진다. 사유는 받지 않고 패널티도 없다. 빠짐(WITHDRAWN)이 되고 뒤 예비의 순번이 한 칸씩 당겨진다.
+            매칭 완료는 매칭 취소(/cancel), 승격 응답 대기는 승격 거절(/promotion/decline)로 한다.
+            빠진 뒤 같은 신청에 다시 지원하면 맨 뒤 예비가 된다. 응답은 매칭 현황 카드와 같은 모양이다.""")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "빠지기 완료 (status: WITHDRAWN)")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "로그인 필요")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "비밀번호 변경 필요")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "APPLICATION_NOT_FOUND — 없는 지원이거나 내 지원이 아님")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "APPLICATION_INVALID_STATUS — 예비가 아님 (이미 승격·빠짐·예비 종료 등)")
+    ResponseEntity<ApiResult<MyApplicationResponseDto>> leave(@Parameter(hidden = true) AuthPrincipal principal,
+                                                            @Parameter(description = "지원 ID") Long applicationId);
 
     @Operation(summary = "승격 수락 (갈게요)", description = """
             식사 1시간 이내에 예비에서 승격돼 응답 대기(PROMOTION_PENDING)인 지원을 수락한다. 매칭 완료(MATCHED)가 되고
