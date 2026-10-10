@@ -200,6 +200,43 @@ class DomainRepositoryTest {
     }
 
     @Test
+    void 계정비활성화대상조회_진행중신청과활성지원만조회() {
+        // given
+        Student student = saveStudent();
+        Helper helper = saveHelper();
+        HelpRequest recruiting = helpRequestRepository.save(new HelpRequest(
+                student, NOW.plusDays(1), Set.of(HelpType.SERVING), null, null));
+        HelpRequest matched = new HelpRequest(
+                student, NOW.plusDays(2), Set.of(HelpType.SEATING), null, null);
+        matched.match(NOW);
+        helpRequestRepository.save(matched);
+        HelpRequest canceled = new HelpRequest(
+                student, NOW.plusDays(3), Set.of(HelpType.MOVING), null, null);
+        canceled.withdraw(NOW);
+        helpRequestRepository.save(canceled);
+
+        Application matchedApplication = new Application(matched, helper, NOW);
+        matchedApplication.match(NOW);
+        Application waitingApplication = new Application(matched, helper, NOW.plusMinutes(1));
+        Application completedApplication = new Application(matched, helper, NOW.minusDays(1));
+        completedApplication.match(NOW.minusDays(1));
+        completedApplication.complete();
+        applicationRepository.save(matchedApplication);
+        applicationRepository.save(waitingApplication);
+        applicationRepository.save(completedApplication);
+        flushAndClear();
+
+        // when
+        List<Long> requestIds = helpRequestRepository.findActiveIdsByStudentAccountId(student.getAccountId());
+        List<Application> applications = applicationRepository.findActiveByHelpRequestIdForUpdate(matched.getId());
+
+        // then
+        assertThat(requestIds).containsExactly(recruiting.getId(), matched.getId());
+        assertThat(applications).extracting(Application::getId)
+                .containsExactly(matchedApplication.getId(), waitingApplication.getId());
+    }
+
+    @Test
     void save_도우미_계정과PK공유() {
         // given
         Helper saved = saveHelper();

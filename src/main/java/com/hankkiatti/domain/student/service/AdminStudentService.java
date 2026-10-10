@@ -11,6 +11,7 @@ import com.hankkiatti.domain.application.entity.ApplicationStatus;
 import com.hankkiatti.domain.application.repository.ApplicationRepository;
 import com.hankkiatti.domain.auth.exception.AuthErrorType;
 import com.hankkiatti.domain.auth.exception.AuthException;
+import com.hankkiatti.domain.auth.repository.PasswordResetTokenRepository;
 import com.hankkiatti.domain.common.PhoneNumbers;
 import com.hankkiatti.domain.helprequest.entity.HelpRequest;
 import com.hankkiatti.domain.helprequest.entity.HelpRequestStatus;
@@ -19,6 +20,8 @@ import com.hankkiatti.domain.helprequest.repository.HelpRequestRepository;
 import com.hankkiatti.domain.mail.entity.MailType;
 import com.hankkiatti.domain.mail.service.MailOutboxService;
 import com.hankkiatti.domain.student.dto.request.AdminStudentCreateRequestDto;
+import com.hankkiatti.domain.student.dto.request.AdminStudentUpdateRequestDto;
+import com.hankkiatti.domain.student.dto.response.AdminStudentAccountStatusResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentApplicationResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentCreateResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentCredentialMailResponseDto;
@@ -36,6 +39,7 @@ import com.hankkiatti.domain.student.exception.StudentException;
 import com.hankkiatti.domain.student.repository.StudentRepository;
 import com.hankkiatti.domain.student.repository.StudentRecentRequestProjection;
 import java.security.SecureRandom;
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -71,8 +75,10 @@ public class AdminStudentService {
     private final StudentRepository studentRepository;
     private final HelpRequestRepository helpRequestRepository;
     private final ApplicationRepository applicationRepository;
+    private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final MailOutboxService mailOutboxService;
     private final PasswordEncoder passwordEncoder;
+    private final Clock clock;
 
     @Transactional(readOnly = true)
     public List<AdminStudentSummaryResponseDto> getStudents(Long adminAccountId, String keyword,
@@ -106,6 +112,70 @@ public class AdminStudentService {
                 requests.stream().map(request -> toMatching(request, applications.getOrDefault(
                         request.getId(), List.of()))).toList(),
                 incidentHistory(requests, applications));
+    }
+
+    @Transactional
+    public AdminStudentInfoResponseDto update(Long adminAccountId, Long studentAccountId,
+                                              AdminStudentUpdateRequestDto request) {
+        requireFullAdmin(adminAccountId);
+        Student student = studentRepository.findByIdForUpdate(studentAccountId)
+                .orElseThrow(() -> new StudentException(StudentErrorType.NOT_FOUND,
+                        "studentAccountId=" + studentAccountId));
+        student.updateInfo(
+                request.name().trim(),
+                PhoneNumbers.normalize(request.phone()),
+                request.kakaoId().trim(),
+                request.schoolEmail().trim().toLowerCase(Locale.ROOT),
+                request.disabilityType(),
+                trimToNull(request.specialNote()));
+
+        LocalDateTime recentRequestAt = recentRequestAt(List.of(student)).get(studentAccountId);
+        log.info("장애학생 정보 수정: accountId={}", studentAccountId);
+        return toInfo(student, recentRequestAt, true);
+    }
+
+    @Transactional
+    public AdminStudentCredentialMailResponseDto resendCredentialMail(Long adminAccountId, Long studentAccountId) {
+        requireFullAdmin(adminAccountId);
+        Account account = findStudentAccountForUpdate(studentAccountId);
+        Student student = findStudentForUpdate(studentAccountId);
+        if (student.getCredentialMailStatus() == CredentialMailStatus.PENDING) {
+            throw new StudentException(StudentErrorType.CREDENTIAL_MAIL_PENDING,
+                    "studentAccountId=" + studentAccountId);
+        }
+
+        issueCredentialMail(account, student);
+        log.info("장애학생 계정정보 재발송 요청: accountId={}", account.getId());
+        return toCredentialMailResponse(account, student);
+    }
+
+    @Transactional
+    public AdminStudentAccountStatusResponseDto deactivate(Long adminAccountId, Long studentAccountId) {
+        requireFullAdmin(adminAccountId);
+        Account account = findStudentAccountForUpdate(studentAccountId);
+        findStudentForUpdate(studentAccountId);
+
+        LocalDateTime now = LocalDateTime.now(clock);
+        List<Long> activeRequestIds = helpRequestRepository.findActiveIdsByStudentAccountId(studentAccountId);
+        int canceledApplications = 0;
+        for (Long requestId : activeRequestIds) {
+            HelpRequest helpRequest = helpRequestRepository.findByIdForUpdate(requestId).orElse(null);
+            if (helpRequest == null || !helpRequest.getStatus().isInProgress()) {
+                continue;
+            }
+            List<Application> activeApplications =
+                    applicationRepository.findActiveByHelpRequestIdForUpdate(requestId);
+            activeApplications.forEach(Application::cancelByStudent);
+            canceledApplications += activeApplications.size();
+            helpRequest.cancelByDeactivation(now);
+        }
+
+        account.deactivate(now);
+        passwordResetTokenRepository.invalidateAllByAccountId(studentAccountId, now);
+        log.info("장애학생 계정 비활성화: accountId={}, requests={}, applications={}",
+                studentAccountId, activeRequestIds.size(), canceledApplications);
+        return new AdminStudentAccountStatusResponseDto(
+                account.getId(), account.getStatus(), account.getDeactivatedAt());
     }
 
     @Transactional
@@ -162,29 +232,46 @@ public class AdminStudentService {
     public AdminStudentCredentialMailResponseDto retryCredentialMail(Long adminAccountId, Long studentAccountId) {
         requireFullAdmin(adminAccountId);
 
-        Account account = accountRepository.findByIdForUpdate(studentAccountId)
-                .filter(found -> found.getRole() == AccountRole.STUDENT)
-                .orElseThrow(() -> new StudentException(StudentErrorType.NOT_FOUND,
-                        "studentAccountId=" + studentAccountId));
-        Student student = studentRepository.findByIdForUpdate(studentAccountId)
-                .orElseThrow(() -> new StudentException(StudentErrorType.NOT_FOUND,
-                        "studentAccountId=" + studentAccountId));
+        Account account = findStudentAccountForUpdate(studentAccountId);
+        Student student = findStudentForUpdate(studentAccountId);
         if (student.getCredentialMailStatus() != CredentialMailStatus.FAILED) {
             throw new StudentException(StudentErrorType.CREDENTIAL_MAIL_NOT_FAILED,
                     "studentAccountId=" + studentAccountId + ", status=" + student.getCredentialMailStatus());
         }
 
+        issueCredentialMail(account, student);
+        log.info("장애학생 계정정보 메일 재발송 요청: accountId={}", account.getId());
+
+        return toCredentialMailResponse(account, student);
+    }
+
+    private Account findStudentAccountForUpdate(Long studentAccountId) {
+        return accountRepository.findByIdForUpdate(studentAccountId)
+                .filter(found -> found.getRole() == AccountRole.STUDENT)
+                .orElseThrow(() -> new StudentException(StudentErrorType.NOT_FOUND,
+                        "studentAccountId=" + studentAccountId));
+    }
+
+    private Student findStudentForUpdate(Long studentAccountId) {
+        return studentRepository.findByIdForUpdate(studentAccountId)
+                .orElseThrow(() -> new StudentException(StudentErrorType.NOT_FOUND,
+                        "studentAccountId=" + studentAccountId));
+    }
+
+    private void issueCredentialMail(Account account, Student student) {
         String temporaryPassword = generateTemporaryPassword();
         account.issueTemporaryPassword(passwordEncoder.encode(temporaryPassword));
         student.markCredentialMailPending();
+        passwordResetTokenRepository.invalidateAllByAccountId(account.getId(), LocalDateTime.now(clock));
         mailOutboxService.enqueue(
                 MailType.STUDENT_CREDENTIAL,
                 student.getSchoolEmail(),
                 CREDENTIAL_MAIL_SUBJECT,
                 credentialMailBody(account.getLoginId(), temporaryPassword),
                 account.getId());
-        log.info("장애학생 계정정보 메일 재발송 요청: accountId={}", account.getId());
+    }
 
+    private AdminStudentCredentialMailResponseDto toCredentialMailResponse(Account account, Student student) {
         return new AdminStudentCredentialMailResponseDto(
                 account.getId(), account.getLoginId(), student.getSchoolEmail(), student.getCredentialMailStatus());
     }

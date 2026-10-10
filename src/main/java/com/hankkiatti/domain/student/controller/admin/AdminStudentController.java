@@ -2,9 +2,12 @@ package com.hankkiatti.domain.student.controller.admin;
 
 import com.hankkiatti.domain.account.entity.AccountStatus;
 import com.hankkiatti.domain.student.dto.request.AdminStudentCreateRequestDto;
+import com.hankkiatti.domain.student.dto.request.AdminStudentUpdateRequestDto;
+import com.hankkiatti.domain.student.dto.response.AdminStudentAccountStatusResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentCreateResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentCredentialMailResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentDetailResponseDto;
+import com.hankkiatti.domain.student.dto.response.AdminStudentInfoResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentSummaryResponseDto;
 import com.hankkiatti.domain.student.entity.DisabilityType;
 import com.hankkiatti.domain.student.service.AdminStudentService;
@@ -18,6 +21,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -50,6 +54,34 @@ public class AdminStudentController implements AdminStudentControllerDocs {
             @PathVariable Long studentAccountId) {
         return ApiResponse.of(SuccessType.SUCCESS,
                 adminStudentService.getStudent(principal.accountId(), studentAccountId));
+    }
+
+    @Override
+    @PatchMapping("/{studentAccountId}")
+    public ResponseEntity<ApiResult<AdminStudentInfoResponseDto>> update(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @PathVariable Long studentAccountId,
+            @Valid @RequestBody AdminStudentUpdateRequestDto request) {
+        return ApiResponse.of(SuccessType.SUCCESS,
+                adminStudentService.update(principal.accountId(), studentAccountId, request));
+    }
+
+    @Override
+    @PostMapping("/{studentAccountId}/credential-mail/resend")
+    public ResponseEntity<ApiResult<AdminStudentCredentialMailResponseDto>> resendCredentialMail(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @PathVariable Long studentAccountId) {
+        return ApiResponse.of(SuccessType.SUCCESS,
+                adminStudentService.resendCredentialMail(principal.accountId(), studentAccountId));
+    }
+
+    @Override
+    @PatchMapping("/{studentAccountId}/deactivate")
+    public ResponseEntity<ApiResult<AdminStudentAccountStatusResponseDto>> deactivate(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @PathVariable Long studentAccountId) {
+        return ApiResponse.of(SuccessType.SUCCESS,
+                adminStudentService.deactivate(principal.accountId(), studentAccountId));
     }
 
     @Override

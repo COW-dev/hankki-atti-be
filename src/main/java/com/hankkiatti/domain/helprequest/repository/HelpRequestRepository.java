@@ -28,6 +28,17 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequest, Long> 
 
     List<HelpRequest> findByStudentAccountIdOrderByStartAtDescIdDesc(Long studentId);
 
+    default List<Long> findActiveIdsByStudentAccountId(Long studentId) {
+        return findIdsByStudentAccountIdAndStatusIn(studentId, HelpRequestStatus.IN_PROGRESS);
+    }
+
+    @Query("""
+            select r.id from HelpRequest r
+            where r.student.accountId = :studentId and r.status in :statuses
+            order by r.id""")
+    List<Long> findIdsByStudentAccountIdAndStatusIn(@Param("studentId") Long studentId,
+                                                    @Param("statuses") List<HelpRequestStatus> statuses);
+
     @Query("""
             select r.student.accountId as studentAccountId, max(r.startAt) as recentRequestAt
             from HelpRequest r

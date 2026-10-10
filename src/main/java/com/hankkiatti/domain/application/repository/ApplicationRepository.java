@@ -19,6 +19,19 @@ public interface ApplicationRepository extends JpaRepository<Application, Long> 
 
     List<Application> findByHelpRequestIdAndStatus(Long helpRequestId, ApplicationStatus status);
 
+    default List<Application> findActiveByHelpRequestIdForUpdate(Long helpRequestId) {
+        return findByHelpRequestIdAndStatusInForUpdate(helpRequestId, ApplicationStatus.ACTIVE);
+    }
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select a from Application a
+            where a.helpRequest.id = :helpRequestId and a.status in :statuses
+            order by a.id""")
+    List<Application> findByHelpRequestIdAndStatusInForUpdate(
+            @Param("helpRequestId") Long helpRequestId,
+            @Param("statuses") Collection<ApplicationStatus> statuses);
+
     @Query("""
             select a from Application a join fetch a.helper
             where a.helpRequest.id in :helpRequestIds
