@@ -3,6 +3,8 @@ package com.hankkiatti.domain.application.controller;
 import com.hankkiatti.domain.application.dto.request.HelperCancelRequestDto;
 import com.hankkiatti.domain.application.dto.response.ApplyResponseDto;
 import com.hankkiatti.domain.application.dto.response.HelperCancelResponseDto;
+import com.hankkiatti.domain.application.dto.response.MyApplicationsResponseDto;
+import com.hankkiatti.domain.application.entity.MyApplicationFilter;
 import com.hankkiatti.global.response.ApiResult;
 import com.hankkiatti.global.security.AuthPrincipal;
 import io.swagger.v3.oas.annotations.Operation;
@@ -10,7 +12,7 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
 
-@Tag(name = "지원", description = "도우미가 신청에 지원하고 매칭을 취소하는 API")
+@Tag(name = "지원", description = "도우미가 신청에 지원하고 매칭 현황을 보고 매칭을 취소하는 API")
 public interface ApplicationControllerDocs {
 
     @Operation(summary = "지원", description = """
@@ -25,6 +27,21 @@ public interface ApplicationControllerDocs {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "APPLICATION_NOT_OPEN — 모집 중·매칭 완료가 아니거나 식사가 시작됨, APPLICATION_ALREADY_APPLIED — 이 신청에 진행 중 지원이 있음, APPLICATION_TIME_OVERLAP — 매칭 완료·승격 응답 대기와 시간이 겹침")
     ResponseEntity<ApiResult<ApplyResponseDto>> apply(@Parameter(hidden = true) AuthPrincipal principal,
                                                       @Parameter(description = "신청 ID") Long helpRequestId);
+
+    @Operation(summary = "매칭 현황 (도우미)", description = """
+            도우미 홈(F-07). 내 지원을 진행 중(inProgress: 매칭 완료·승격 응답 대기·예비, 식사 시각 가까운 순)과
+            지난 활동(past: 이용 완료·노쇼·취소·예비 종료·자동 제외·빠짐·승격 거절, 최근 순)으로 나눠 준다.
+            filter: ALL(기본) · MATCHED(매칭 완료만) · WAITING(예비·승격 응답 대기) · PAST(지난 활동만). 고르지 않은 쪽 목록은 빈 배열이다.
+            장애학생 이름·카톡 ID(student)는 매칭 완료 카드에만 있다. 전화번호·장애 유형·특이사항·메모는 주지 않는다.
+            waitingOrder는 예비일 때 지금 순번이고, 앞 사람이 빠지거나 승격되면 당겨진다. 예비 인원 총수는 주지 않는다.
+            cancelReason은 내가 취소한 지원, volunteerHours는 이용 완료(1.0)·노쇼(0.0)에만 있다.""")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "COMMON_INVALID_REQUEST — filter 값이 목록에 없음")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "로그인 필요")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "장애학생 계정이거나 비밀번호 변경 필요")
+    ResponseEntity<ApiResult<MyApplicationsResponseDto>> getMyApplications(
+            @Parameter(hidden = true) AuthPrincipal principal,
+            @Parameter(description = "필터 탭 (기본 ALL)") MyApplicationFilter filter);
 
     @Operation(summary = "매칭 취소 (도우미)", description = """
             매칭된 도우미가 사유를 골라 취소한다. 관리자 승인 없이 바로 처리되고 사유·시각이 이력으로 남는다.
