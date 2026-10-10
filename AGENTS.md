@@ -108,7 +108,7 @@ domain/
 ├── student/      Student, DisabilityType, CredentialMailStatus
 ├── helper/       Helper, 도우미 회원가입(HelperSignupService, 공개 경로 `/api/helpers/signup`)
 ├── admin/        Admin, AdminGrade
-├── helprequest/  HelpRequest, HelpType, HelpRequestStatus, RequestCancelType, Meal, 신청 가능 날짜·시각(HelpRequestSchedule), 식사 시작·종료 자동 처리(MealTimeJob)
+├── helprequest/  HelpRequest, HelpType, HelpRequestStatus, RequestCancelType, Meal, 신청 가능 날짜·시각(HelpRequestSchedule), 신청·철회·장애학생 매칭 취소·노쇼 신고(HelpRequestService — 매칭 취소는 HelpRequestCanceledByStudentEvent 발행), 식사 시작·종료 자동 처리(MealTimeJob)
 └── application/  Application, ApplicationStatus(ACTIVE·CONFIRMED), CancelReason, ApplicationAfterAction, 지원(ApplicationService), 도우미 매칭 취소(HelperCancelService), 다음 예비 승격·모집 재개(WaitingPromoter — 취소·승격 거절·응답 마감이 같이 씀), 식사 1시간 이내 승격의 수락·거절·응답 마감 자동 거절(PromotionResponseService), 매칭 현황 조회(MyApplicationService, MyApplicationFilter), 확정 매칭 시 겹치는 다른 예비 자동 제외(HelperConfirmedEvent → OverlappingWaitExcluder), 지원 가능 규칙(ApplyPolicy — 요청 목록 카드·지원 검증·승격 후보 확인이 같이 씀), 지원 결과 예상 ApplyOutcome·ApplyBlockReason(저장 안 함)
 ```
 - `Student`·`Helper`·`Admin`은 `Account`와 PK를 공유하는 1:1 프로필이다 (`@MapsId`)

@@ -79,6 +79,21 @@ public interface ApplicationRepository extends JpaRepository<Application, Long> 
                                                             @Param("status") ApplicationStatus status);
 
     /**
+     * 신청의 진행 중 지원(매칭 완료·승격 응답 대기·예비)을 잠그고 가져온다 (장애학생 매칭 취소). 신청 행 락 다음에 잡는다.
+     */
+    default List<Application> findActiveForUpdate(Long helpRequestId) {
+        return findByHelpRequestIdAndStatusInForUpdate(helpRequestId, ApplicationStatus.ACTIVE);
+    }
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select a from Application a
+            where a.helpRequest.id = :helpRequestId and a.status in :statuses
+            order by a.id""")
+    List<Application> findByHelpRequestIdAndStatusInForUpdate(@Param("helpRequestId") Long helpRequestId,
+                                                              @Param("statuses") Collection<ApplicationStatus> statuses);
+
+    /**
      * 신청들에 매칭된 지원(매칭 완료·이용 완료·노쇼)을 도우미와 함께 가져온다. 장애학생에게 도우미 이름·카톡 ID를 보여 줄 때 쓴다.
      * 승격 응답 대기 중인 지원은 넣지 않는다 — 확정되지 않은 도우미의 연락처를 미리 알리지 않으려고.
      */
