@@ -26,6 +26,8 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequest, Long> 
 
     List<HelpRequest> findByStudentAccountId(Long studentId);
 
+    List<HelpRequest> findByStudentAccountIdOrderByStartAtDescIdDesc(Long studentId);
+
     @Query("""
             select r.student.accountId as studentAccountId, max(r.startAt) as recentRequestAt
             from HelpRequest r

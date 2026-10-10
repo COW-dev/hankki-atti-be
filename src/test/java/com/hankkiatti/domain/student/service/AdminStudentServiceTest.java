@@ -17,14 +17,22 @@ import com.hankkiatti.domain.account.repository.AccountRepository;
 import com.hankkiatti.domain.admin.entity.Admin;
 import com.hankkiatti.domain.admin.entity.AdminGrade;
 import com.hankkiatti.domain.admin.repository.AdminRepository;
+import com.hankkiatti.domain.application.entity.Application;
+import com.hankkiatti.domain.application.entity.CancelReason;
+import com.hankkiatti.domain.application.repository.ApplicationRepository;
 import com.hankkiatti.domain.auth.exception.AuthErrorType;
 import com.hankkiatti.domain.auth.exception.AuthException;
+import com.hankkiatti.domain.helper.entity.Helper;
+import com.hankkiatti.domain.helprequest.entity.HelpRequest;
+import com.hankkiatti.domain.helprequest.entity.HelpType;
 import com.hankkiatti.domain.helprequest.repository.HelpRequestRepository;
 import com.hankkiatti.domain.mail.entity.MailType;
 import com.hankkiatti.domain.mail.service.MailOutboxService;
 import com.hankkiatti.domain.student.dto.request.AdminStudentCreateRequestDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentCreateResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentCredentialMailResponseDto;
+import com.hankkiatti.domain.student.dto.response.AdminStudentDetailResponseDto;
+import com.hankkiatti.domain.student.dto.response.AdminStudentIncidentType;
 import com.hankkiatti.domain.student.dto.response.AdminStudentSummaryResponseDto;
 import com.hankkiatti.domain.student.entity.CredentialMailStatus;
 import com.hankkiatti.domain.student.entity.DisabilityType;
@@ -36,6 +44,7 @@ import com.hankkiatti.domain.student.repository.StudentRecentRequestProjection;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -64,6 +73,9 @@ class AdminStudentServiceTest {
     private HelpRequestRepository helpRequestRepository;
 
     @Mock
+    private ApplicationRepository applicationRepository;
+
+    @Mock
     private MailOutboxService mailOutboxService;
 
     @Mock
@@ -75,7 +87,7 @@ class AdminStudentServiceTest {
     void setUp() {
         adminStudentService = new AdminStudentService(
                 adminRepository, accountRepository, studentRepository, helpRequestRepository,
-                mailOutboxService, passwordEncoder);
+                applicationRepository, mailOutboxService, passwordEncoder);
     }
 
     private AdminStudentCreateRequestDto request() {
@@ -143,6 +155,21 @@ class AdminStudentServiceTest {
         return student;
     }
 
+    private Helper helper(Long id) {
+        Account account = new Account("helper@mju.ac.kr", "hash", AccountRole.HELPER, false, false);
+        ReflectionTestUtils.setField(account, "id", id);
+        Helper helper = new Helper(account, "이도우미", "60260001", "helper@mju.ac.kr",
+                "010-0000-0000", "helper_kakao", false, LocalDateTime.of(2026, 10, 1, 9, 0));
+        ReflectionTestUtils.setField(helper, "accountId", id);
+        return helper;
+    }
+
+    private HelpRequest helpRequest(Student student, long id, LocalDateTime startAt) {
+        HelpRequest request = new HelpRequest(student, startAt, Set.of(HelpType.SERVING), null, null);
+        ReflectionTestUtils.setField(request, "id", id);
+        return request;
+    }
+
     @Test
     void getStudents_전체권한관리자_민감정보를가려서최근신청과함께조회한다() {
         // given
@@ -208,6 +235,98 @@ class AdminStudentServiceTest {
                 .isInstanceOf(AuthException.class)
                 .extracting("errorCode").isEqualTo(AuthErrorType.ACCESS_DENIED);
         verify(studentRepository, never()).search(any(), any(), any());
+    }
+
+    @Test
+    void getStudent_전체권한관리자_원본정보와매칭현황과취소노쇼이력을조회한다() {
+        // given
+        givenFullAdmin();
+        Student student = student(studentAccount(10L));
+        Helper helper = helper(20L);
+        LocalDateTime now = LocalDateTime.of(2026, 10, 5, 10, 0);
+
+        HelpRequest withdrawn = helpRequest(student, 101L, now.plusDays(1));
+        withdrawn.withdraw(now.plusMinutes(1));
+        HelpRequest studentCanceled = helpRequest(student, 102L, now.plusDays(2));
+        studentCanceled.match(now);
+        studentCanceled.cancelByStudent(now.plusMinutes(2));
+        HelpRequest deactivated = helpRequest(student, 103L, now.plusDays(3));
+        deactivated.cancelByDeactivation(now.plusMinutes(3));
+        HelpRequest noShow = helpRequest(student, 104L, now.plusDays(4));
+        noShow.match(now);
+        noShow.complete(now.plusHours(1));
+        noShow.reportNoShow(now.plusHours(2));
+        HelpRequest helperCanceled = helpRequest(student, 105L, now.plusDays(5));
+        helperCanceled.match(now);
+        Application application = new Application(helperCanceled, helper, now);
+        ReflectionTestUtils.setField(application, "id", 201L);
+        application.match(now);
+        application.cancelByHelper(CancelReason.OTHER, "개인 사정", now.plusHours(3));
+
+        List<HelpRequest> requests = List.of(helperCanceled, noShow, deactivated, studentCanceled, withdrawn);
+        given(studentRepository.findWithAccountByAccountId(10L)).willReturn(Optional.of(student));
+        given(helpRequestRepository.findByStudentAccountIdOrderByStartAtDescIdDesc(10L)).willReturn(requests);
+        given(applicationRepository.findWithHelperByHelpRequestIdIn(any())).willReturn(List.of(application));
+
+        // when
+        AdminStudentDetailResponseDto result = adminStudentService.getStudent(ADMIN_ID, 10L);
+
+        // then
+        assertThat(result.information().phone()).isEqualTo("010-1234-5678");
+        assertThat(result.information().schoolEmail()).isEqualTo("student@mju.ac.kr");
+        assertThat(result.information().disabilityType()).isEqualTo(DisabilityType.PHYSICAL);
+        assertThat(result.information().recentRequestAt()).isEqualTo(helperCanceled.getStartAt());
+        assertThat(result.matchingHistory()).hasSize(5);
+        assertThat(result.matchingHistory().get(0).applications()).singleElement().satisfies(item -> {
+            assertThat(item.applicationId()).isEqualTo(201L);
+            assertThat(item.helperName()).isEqualTo("이도우미");
+        });
+        assertThat(result.incidentHistory()).extracting("type").containsExactly(
+                AdminStudentIncidentType.HELPER_CANCELED,
+                AdminStudentIncidentType.NO_SHOW,
+                AdminStudentIncidentType.ACCOUNT_DEACTIVATED,
+                AdminStudentIncidentType.STUDENT_CANCELED,
+                AdminStudentIncidentType.REQUEST_WITHDRAWN);
+        assertThat(result.incidentHistory().get(0).cancelReason()).isEqualTo(CancelReason.OTHER);
+        assertThat(result.incidentHistory().get(0).cancelReasonDetail()).isEqualTo("개인 사정");
+    }
+
+    @Test
+    void getStudent_제한권한관리자_민감한정보를제외한다() {
+        // given
+        given(adminRepository.findById(ADMIN_ID)).willReturn(Optional.of(admin(AdminGrade.LIMITED)));
+        Student student = student(studentAccount(10L));
+        given(studentRepository.findWithAccountByAccountId(10L)).willReturn(Optional.of(student));
+        given(helpRequestRepository.findByStudentAccountIdOrderByStartAtDescIdDesc(10L)).willReturn(List.of());
+
+        // when
+        AdminStudentDetailResponseDto result = adminStudentService.getStudent(ADMIN_ID, 10L);
+
+        // then
+        assertThat(result.information().name()).isEqualTo("김한끼");
+        assertThat(result.information().studentNo()).isEqualTo("60261234");
+        assertThat(result.information().status()).isEqualTo(AccountStatus.ACTIVE);
+        assertThat(result.information().phone()).isNull();
+        assertThat(result.information().kakaoId()).isNull();
+        assertThat(result.information().schoolEmail()).isNull();
+        assertThat(result.information().disabilityType()).isNull();
+        assertThat(result.information().specialNote()).isNull();
+        assertThat(result.information().credentialMailStatus()).isNull();
+        assertThat(result.matchingHistory()).isEmpty();
+        assertThat(result.incidentHistory()).isEmpty();
+        verify(applicationRepository, never()).findWithHelperByHelpRequestIdIn(any());
+    }
+
+    @Test
+    void getStudent_없는학생_NOT_FOUND() {
+        // given
+        givenFullAdmin();
+        given(studentRepository.findWithAccountByAccountId(99L)).willReturn(Optional.empty());
+
+        // when & then
+        assertThatThrownBy(() -> adminStudentService.getStudent(ADMIN_ID, 99L))
+                .isInstanceOf(StudentException.class)
+                .extracting("errorCode").isEqualTo(StudentErrorType.NOT_FOUND);
     }
 
     @Test

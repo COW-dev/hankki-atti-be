@@ -173,6 +173,33 @@ class DomainRepositoryTest {
     }
 
     @Test
+    void 관리자학생상세조회_계정과신청과지원도우미를필요한순서로조회() {
+        // given
+        Student student = saveStudent();
+        Helper helper = saveHelper();
+        HelpRequest earlier = helpRequestRepository.save(new HelpRequest(
+                student, NOW.plusDays(1), Set.of(HelpType.SERVING), null, null));
+        HelpRequest later = helpRequestRepository.save(new HelpRequest(
+                student, NOW.plusDays(2), Set.of(HelpType.SEATING), null, null));
+        Application application = applicationRepository.save(new Application(later, helper, NOW));
+        flushAndClear();
+
+        // when
+        Student found = studentRepository.findWithAccountByAccountId(student.getAccountId()).orElseThrow();
+        List<HelpRequest> requests =
+                helpRequestRepository.findByStudentAccountIdOrderByStartAtDescIdDesc(student.getAccountId());
+        List<Application> applications = applicationRepository.findWithHelperByHelpRequestIdIn(
+                List.of(earlier.getId(), later.getId()));
+
+        // then
+        assertThat(Hibernate.isInitialized(found.getAccount())).isTrue();
+        assertThat(requests).extracting(HelpRequest::getId).containsExactly(later.getId(), earlier.getId());
+        assertThat(applications).extracting(Application::getId).containsExactly(application.getId());
+        assertThat(applications).allSatisfy(
+                foundApplication -> assertThat(Hibernate.isInitialized(foundApplication.getHelper())).isTrue());
+    }
+
+    @Test
     void save_도우미_계정과PK공유() {
         // given
         Helper saved = saveHelper();

@@ -19,6 +19,13 @@ public interface ApplicationRepository extends JpaRepository<Application, Long> 
 
     List<Application> findByHelpRequestIdAndStatus(Long helpRequestId, ApplicationStatus status);
 
+    @Query("""
+            select a from Application a join fetch a.helper
+            where a.helpRequest.id in :helpRequestIds
+            order by a.helpRequest.id, a.appliedAt, a.id""")
+    List<Application> findWithHelperByHelpRequestIdIn(
+            @Param("helpRequestIds") Collection<Long> helpRequestIds);
+
     // 예비 순번 계산용. 신청 행을 잠근 뒤 세므로 그 사이 다른 예비가 끼어들지 않는다
     long countByHelpRequestIdAndStatus(Long helpRequestId, ApplicationStatus status);
 
