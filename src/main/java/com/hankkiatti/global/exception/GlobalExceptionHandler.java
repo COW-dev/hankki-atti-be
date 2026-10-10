@@ -4,6 +4,7 @@ import com.hankkiatti.global.response.ApiResult;
 import com.hankkiatti.global.response.type.CommonErrorType;
 import com.hankkiatti.global.response.type.ErrorCode;
 import jakarta.validation.ConstraintViolationException;
+import java.sql.SQLException;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -23,6 +24,7 @@ import org.springframework.web.method.annotation.HandlerMethodValidationExceptio
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
+import tools.jackson.core.JacksonException;
 
 @Slf4j
 @RestControllerAdvice
@@ -65,9 +67,13 @@ public class GlobalExceptionHandler {
         return json(CommonErrorType.VALIDATION_FAILED, message);
     }
 
+    // Jackson 메시지에는 입력값 일부가 들어가므로(예: Unrecognized token '...') 어느 필드인지만 남긴다
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ApiResult<?>> handleNotReadable(HttpMessageNotReadableException exception) {
-        log.warn("요청 본문을 읽을 수 없습니다", exception);
+        JacksonException cause = findCause(exception, JacksonException.class);
+        log.warn("요청 본문을 읽을 수 없습니다: type={}, path={}",
+                cause == null ? exception.getClass().getSimpleName() : cause.getClass().getSimpleName(),
+                cause == null ? null : cause.getPathReference());
         return json(CommonErrorType.INVALID_REQUEST,
                 "요청 값 검증에 실패했습니다. (요청 본문 형식이 올바르지 않습니다)");
     }
@@ -94,9 +100,17 @@ public class GlobalExceptionHandler {
         return json(errorType, message);
     }
 
+    // DB 메시지에는 위반한 값이 그대로 들어가므로(예: Duplicate entry 'x@mju.ac.kr') 어느 제약인지만 남긴다
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ApiResult<?>> handleDataIntegrityViolation(DataIntegrityViolationException exception) {
-        log.warn("데이터 무결성 위반: {}", exception.getMessage(), exception);
+        org.hibernate.exception.ConstraintViolationException violation =
+                findCause(exception, org.hibernate.exception.ConstraintViolationException.class);
+        SQLException sqlException = findCause(exception, SQLException.class);
+        log.warn("데이터 무결성 위반: constraint={}, kind={}, sqlState={}, errorCode={}",
+                violation == null ? null : violation.getConstraintName(),
+                violation == null ? null : violation.getKind(),
+                sqlException == null ? null : sqlException.getSQLState(),
+                sqlException == null ? null : sqlException.getErrorCode());
         return json(CommonErrorType.CONFLICT, CommonErrorType.CONFLICT.getMessage());
     }
 
@@ -140,6 +154,13 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(errorCode.getHttpStatusCode())
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(ApiResult.error(errorCode, message));
+    }
+
+    private static <T extends Throwable> T findCause(Throwable exception, Class<T> type) {
+        for (Throwable current = exception; current != null; current = current.getCause()) {
+            if (type.isInstance(current)) return type.cast(current);
+        }
+        return null;
     }
 
     private String buildFieldErrorDetail(List<FieldError> fieldErrors) {

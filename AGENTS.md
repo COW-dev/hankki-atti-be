@@ -186,6 +186,7 @@ DomainException (abstract, global)
   3. `throw new XxxException(XxxErrorType.XXX)` 사용
 - `GlobalExceptionHandler`에 새 예외 타입을 추가할 필요 없음 — `DomainException` 핸들러가 자동 처리
 - 내부 식별자 등 디버그 정보는 `detail` 인자로 넘긴다 (로그에만 남고 응답에는 노출되지 않음)
+- 로그와 `detail`에는 ID·상태·종류만 적는다. 이름·학번·연락처·이메일·장애 정보·메모는 적지 않는다 (장애학생의 학번만 남아도 "이 학번은 장애학생"이 드러난다). DB·JSON·외부 서비스 예외의 메시지는 입력값이 들어갈 수 있으니 그대로 찍지 않는다 — `GlobalExceptionHandler`는 제약 이름·필드 경로만 남긴다
 
 ```java
 // 올바른 예

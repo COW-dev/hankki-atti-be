@@ -22,9 +22,13 @@ import jakarta.validation.Path;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
+import java.sql.SQLException;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -41,6 +45,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
+@ExtendWith(OutputCaptureExtension.class)
 class GlobalExceptionHandlerTest {
 
     private final GlobalExceptionHandler handler = new GlobalExceptionHandler();
@@ -136,6 +141,32 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void handleNotReadable_잘못된토큰_로그에입력값을남기지않는다(CapturedOutput output) throws Exception {
+        // when
+        mockMvc.perform(post("/test/items")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":leakvalue}"))
+                .andExpect(status().isBadRequest());
+
+        // then
+        assertThat(output.getOut()).contains("요청 본문을 읽을 수 없습니다");
+        assertThat(output.getOut()).doesNotContain("leakvalue");
+    }
+
+    @Test
+    void handleNotReadable_필드타입불일치_로그에필드경로를남긴다(CapturedOutput output) throws Exception {
+        // when
+        mockMvc.perform(post("/test/items")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":[\"leakvalue\"]}"))
+                .andExpect(status().isBadRequest());
+
+        // then
+        assertThat(output.getOut()).contains("path=", "[\"name\"]");
+        assertThat(output.getOut()).doesNotContain("leakvalue");
+    }
+
+    @Test
     void handleInvalidParameter_파라미터타입불일치_400반환() throws Exception {
         // when & then
         mockMvc.perform(get("/test/items/abc"))
@@ -177,6 +208,17 @@ class GlobalExceptionHandlerTest {
         // when & then
         mockMvc.perform(get("/test/integrity"))
                 .andExpect(status().isConflict());
+    }
+
+    @Test
+    void handleDataIntegrityViolation_중복값_로그에값없이제약이름만남긴다(CapturedOutput output) throws Exception {
+        // when
+        mockMvc.perform(get("/test/integrity-duplicate"))
+                .andExpect(status().isConflict());
+
+        // then
+        assertThat(output.getOut()).contains("constraint=accounts.UK_login_id", "errorCode=1062");
+        assertThat(output.getOut()).doesNotContain("leak@mju.ac.kr");
     }
 
     @Test
@@ -313,6 +355,15 @@ class GlobalExceptionHandlerTest {
         @GetMapping("/test/integrity")
         void integrity() {
             throw new DataIntegrityViolationException("duplicate key");
+        }
+
+        @GetMapping("/test/integrity-duplicate")
+        void integrityDuplicate() {
+            String message = "Duplicate entry 'leak@mju.ac.kr' for key 'accounts.UK_login_id'";
+            throw new DataIntegrityViolationException("could not execute statement [" + message + "]",
+                    new org.hibernate.exception.ConstraintViolationException(message,
+                            new SQLException(message, "23000", 1062), "insert into accounts ...",
+                            "accounts.UK_login_id"));
         }
 
         @GetMapping("/test/unexpected")

@@ -79,7 +79,8 @@ public class AdminStudentService {
                     request.disabilityType(),
                     trimToNull(request.specialNote())));
         } catch (DataIntegrityViolationException exception) {
-            throw new StudentException(StudentErrorType.REGISTRATION_CONFLICT, "studentNo=" + studentNo);
+            // 학번은 남기지 않는다 — "이 학번은 장애학생"이 로그에 남는다
+            throw new StudentException(StudentErrorType.REGISTRATION_CONFLICT, "학번·아이디 중복");
         }
 
         mailOutboxService.enqueue(
@@ -88,7 +89,7 @@ public class AdminStudentService {
                 CREDENTIAL_MAIL_SUBJECT,
                 credentialMailBody(studentNo, temporaryPassword),
                 account.getId());
-        log.info("장애학생 등록: accountId={}, studentNo={}", account.getId(), studentNo);
+        log.info("장애학생 등록: accountId={}", account.getId());
 
         return new AdminStudentCreateResponseDto(
                 account.getId(),
