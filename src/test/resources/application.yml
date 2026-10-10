@@ -27,6 +27,11 @@ sms:
     # 테스트 중 주기 발송이 끼어들지 않게 끈다. 필요한 테스트에서 SmsRelay를 직접 호출한다
     polling-enabled: false
 
+notification:
+  job:
+    # 테스트 중 주기 처리가 끼어들지 않게 끈다. 커밋 직후 처리는 그대로 돈다. 필요한 테스트에서 NotificationJobRelay를 직접 호출한다
+    polling-enabled: false
+
 meal:
   scheduler:
     # 테스트 중 1분 주기 처리가 끼어들지 않게 끈다. 필요한 테스트에서 MealTimeJob을 직접 호출한다

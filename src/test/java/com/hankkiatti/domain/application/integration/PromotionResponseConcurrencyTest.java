@@ -19,6 +19,7 @@ import com.hankkiatti.domain.helprequest.entity.HelpRequest;
 import com.hankkiatti.domain.helprequest.entity.HelpType;
 import com.hankkiatti.domain.helprequest.repository.HelpRequestRepository;
 import com.hankkiatti.domain.mail.repository.MailOutboxRepository;
+import com.hankkiatti.domain.notification.repository.NotificationJobRepository;
 import com.hankkiatti.domain.notification.repository.NotificationRepository;
 import com.hankkiatti.domain.sms.repository.SmsOutboxRepository;
 import com.hankkiatti.domain.student.entity.Student;
@@ -79,6 +80,9 @@ class PromotionResponseConcurrencyTest {
     private NotificationRepository notificationRepository;
 
     @Autowired
+    private NotificationJobRepository notificationJobRepository;
+
+    @Autowired
     private MailOutboxRepository mailOutboxRepository;
 
     @Autowired
@@ -107,7 +111,8 @@ class PromotionResponseConcurrencyTest {
 
     @AfterEach
     void tearDown() {
-        // 커밋된 지원·취소가 알림과 메일·문자 아웃박스를 쌓으므로 함께 지운다
+        // 커밋된 지원·취소가 알림 작업·알림·메일·문자 아웃박스를 쌓으므로 함께 지운다
+        notificationJobRepository.deleteAll();
         notificationRepository.deleteAll();
         mailOutboxRepository.deleteAll();
         smsOutboxRepository.deleteAll();

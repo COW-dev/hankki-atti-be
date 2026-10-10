@@ -61,6 +61,15 @@ sms:
     retry-delays: 1m,1m,1m
     claim-timeout: 5m
 
+# 알림 작업 처리 — 값 설명은 domain/notification/service/NotificationJobProperties 참고
+notification:
+  job:
+    poll-interval: PT10S
+    batch-size: 50
+    # 1분 간격으로 3번 재시도 (총 4번 시도)
+    retry-delays: 1m,1m,1m
+    claim-timeout: 5m
+
 management:
   health:
     mail:
