@@ -105,6 +105,7 @@ domain/
 ├── auth/         RefreshToken, PasswordResetToken, TokenAudience, 로그인·토큰·비밀번호 변경·재설정 API
 ├── mail/         MailOutbox, 메일 아웃박스 적재·발송(MailOutboxService, MailRelay)
 ├── sms/          SmsOutbox, 문자 아웃박스 적재·발송(SmsOutboxService, SmsRelay), 발송부 SmsSender(AWS SNS 구현 SnsSmsSender)
+├── notification/ Notification, NotificationType, NotificationTargetType, 인앱 알림 저장(NotificationService.notify)·목록(커서)·안 읽은 개수·읽음 API
 ├── student/      Student, DisabilityType, CredentialMailStatus
 ├── helper/       Helper, 도우미 회원가입(HelperSignupService, 공개 경로 `/api/helpers/signup`)
 ├── admin/        Admin, AdminGrade
