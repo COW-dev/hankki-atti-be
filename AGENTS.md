@@ -105,7 +105,7 @@ domain/
 ├── auth/         RefreshToken, PasswordResetToken, TokenAudience, 로그인·토큰·비밀번호 변경·재설정 API
 ├── mail/         MailOutbox, 메일 아웃박스 적재·발송(MailOutboxService, MailRelay)
 ├── sms/          SmsOutbox, 문자 아웃박스 적재·발송(SmsOutboxService, SmsRelay), 발송부 SmsSender(AWS SNS 구현 SnsSmsSender)
-├── notification/ Notification, NotificationType, NotificationTargetType, 인앱 알림 저장(NotificationService.notify)·목록(커서)·안 읽은 개수·읽음 API, 매칭·취소 이벤트 → 알림(NotificationEventListener → NotificationDispatcher, 문장은 NotificationMessages)
+├── notification/ Notification, NotificationType, NotificationTargetType, 인앱 알림 저장(NotificationService.notify)·목록(커서)·안 읽은 개수·읽음 API, 매칭·취소 이벤트 → 알림(NotificationEventListener → NotificationDispatcher, 문구는 `messages/notification.properties` — 키 = 알림 종류, NotificationMessages가 채운다)
 ├── student/      Student, DisabilityType, CredentialMailStatus
 ├── helper/       Helper, 도우미 회원가입(HelperSignupService, 공개 경로 `/api/helpers/signup`)
 ├── admin/        Admin, AdminGrade
@@ -317,7 +317,7 @@ public class HelpRequest extends BaseTimeEntity {
   - 수신자·본문은 로그에 남기지 않는다 (아웃박스 id·종류만)
 - 문자는 `SmsOutboxService.enqueue(...)`로 아웃박스에 적는다. 메일과 같은 흐름(커밋 후 발송·재시도·`SmsFailedEvent`)이고, 발송부는 `SmsSender` 인터페이스라 발신 서비스를 바꿀 때 구현체만 교체한다. 문자가 주 알림 채널이지만 메일도 쓸 수 있으니 두 모듈을 합치거나 없애지 않는다
   - 전화번호는 저장 형식(010-1234-5678)으로 넘기면 E.164(+821012345678)로 바꿔 보낸다. 본문은 `[한끼아띠]`로 시작, 45자 안팎, 링크 없음
-- 인앱 알림은 업무 서비스가 직접 쌓지 않는다. 업무 트랜잭션 안에서 이벤트(`HelperConfirmedEvent`·`HelpRequestFailedEvent` 등)를 발행하면 `NotificationEventListener`가 커밋 뒤에 받아 `NotificationDispatcher`가 새 트랜잭션(`REQUIRES_NEW`)에서 쌓는다 — 업무가 롤백되면 알림도 없고, 알림 저장이 실패해도 업무는 그대로다. 새 알림 종류는 이벤트 + Dispatcher 메서드 + `NotificationMessages` 문장을 더한다
+- 인앱 알림은 업무 서비스가 직접 쌓지 않는다. 업무 트랜잭션 안에서 이벤트(`HelperConfirmedEvent`·`HelpRequestFailedEvent` 등)를 발행하면 `NotificationEventListener`가 커밋 뒤에 받아 `NotificationDispatcher`가 새 트랜잭션(`REQUIRES_NEW`)에서 쌓는다 — 업무가 롤백되면 알림도 없고, 알림 저장이 실패해도 업무는 그대로다. 새 알림 종류는 이벤트 + Dispatcher 메서드 + `notification.properties` 문구(+ `NotificationMessages` 메서드)를 더한다
 - 예약 작업은 `@Scheduled`로 만든다. 스케줄러 스레드는 4개(`spring.task.scheduling.pool.size`) — 한 작업이 오래 걸려도 다른 작업이 밀리지 않게 작업 안에서 오래 막히는 호출을 피한다
 - 비동기 작업은 용도별 스레드 풀을 따로 둔다 (`@Async("mailExecutor")`처럼 이름 지정). 이름 없는 `@Async`는 쓰지 않는다
 - 서버가 여러 대일 수 있으므로 예약 작업은 같은 대상을 두 서버가 동시에 처리해도 안전해야 한다 (조건부 UPDATE로 선점 등)

@@ -33,6 +33,7 @@ public class NotificationDispatcher {
     private final ApplicationRepository applicationRepository;
     private final HelpRequestRepository helpRequestRepository;
     private final NotificationService notificationService;
+    private final NotificationMessages messages;
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void helperConfirmed(HelperConfirmedEvent event) {
@@ -41,19 +42,19 @@ public class NotificationDispatcher {
             switch (event.kind()) {
                 case DIRECT_MATCH -> {
                     toStudent(request, NotificationType.REQUEST_MATCHED,
-                            NotificationMessages.requestMatched(request.getStartAt()));
+                            messages.requestMatched(request.getStartAt()));
                     toHelper(application, NotificationType.APPLICATION_MATCHED,
-                            NotificationMessages.applicationMatched(request.getStartAt()));
+                            messages.applicationMatched(request.getStartAt()));
                 }
                 case PROMOTED -> {
                     toStudent(request, NotificationType.HELPER_CHANGED,
-                            NotificationMessages.helperChanged(request.getStartAt()));
+                            messages.helperChanged(request.getStartAt()));
                     toHelper(application, NotificationType.PROMOTED,
-                            NotificationMessages.promoted(request.getStartAt()));
+                            messages.promoted(request.getStartAt()));
                 }
                 // 도우미는 본인이 수락했으니 장애학생에게만
                 case PROMOTION_ACCEPTED -> toStudent(request, NotificationType.HELPER_CHANGED,
-                        NotificationMessages.helperChanged(request.getStartAt()));
+                        messages.helperChanged(request.getStartAt()));
             }
         });
     }
@@ -62,7 +63,7 @@ public class NotificationDispatcher {
     public void promotionPending(PromotionPendingEvent event) {
         findApplication(event.applicationId()).ifPresent(application -> toHelper(application,
                 NotificationType.PROMOTION_RESPONSE_REQUIRED,
-                NotificationMessages.promotionResponseRequired(application.getHelpRequest().getStartAt(),
+                messages.promotionResponseRequired(application.getHelpRequest().getStartAt(),
                         application.getPromotionDeadline(), event.reminder())));
     }
 
@@ -70,32 +71,32 @@ public class NotificationDispatcher {
     public void waitingRegistered(WaitingRegisteredEvent event) {
         findApplication(event.applicationId()).ifPresent(application -> toHelper(application,
                 NotificationType.WAITING_REGISTERED,
-                NotificationMessages.waitingRegistered(application.getHelpRequest().getStartAt(), event.waitingOrder())));
+                messages.waitingRegistered(application.getHelpRequest().getStartAt(), event.waitingOrder())));
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void waitingExcluded(WaitingExcludedEvent event) {
         findApplication(event.applicationId()).ifPresent(application -> toHelper(application,
                 NotificationType.WAITING_EXCLUDED,
-                NotificationMessages.waitingExcluded(application.getHelpRequest().getStartAt())));
+                messages.waitingExcluded(application.getHelpRequest().getStartAt())));
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void requestReopened(HelpRequestReopenedEvent event) {
         findRequest(event.helpRequestId()).ifPresent(request -> toStudent(request,
-                NotificationType.REQUEST_REOPENED, NotificationMessages.requestReopened(request.getStartAt())));
+                NotificationType.REQUEST_REOPENED, messages.requestReopened(request.getStartAt())));
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void requestFailed(HelpRequestFailedEvent event) {
         notificationService.notify(event.studentAccountId(), NotificationType.REQUEST_FAILED,
-                NotificationMessages.requestFailed(event.startAt()), NotificationTargetType.HELP_REQUEST,
+                messages.requestFailed(event.startAt()), NotificationTargetType.HELP_REQUEST,
                 event.helpRequestId());
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void canceledByStudent(HelpRequestCanceledByStudentEvent event) {
-        String message = NotificationMessages.studentCanceled(event.startAt());
+        String message = messages.studentCanceled(event.startAt());
         event.applicationIds().forEach(applicationId -> findApplication(applicationId)
                 .ifPresent(application -> toHelper(application, NotificationType.STUDENT_CANCELED, message)));
     }
