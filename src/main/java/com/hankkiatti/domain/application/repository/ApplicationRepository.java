@@ -101,6 +101,29 @@ public interface ApplicationRepository extends JpaRepository<Application, Long> 
                                                                @Param("statuses") Collection<ApplicationStatus> statuses);
 
     /**
+     * 도우미의 지원 전부를 신청·장애학생과 함께 가져온다 (매칭 현황). 장애학생 정보는 매칭 완료 카드에만 쓴다.
+     */
+    @Query("""
+            select a from Application a join fetch a.helpRequest r join fetch r.student
+            where a.helper.accountId = :helperId""")
+    List<Application> findMineWithHelpRequest(@Param("helperId") Long helperId);
+
+    /**
+     * 신청들의 예비를 지원 순으로 가져온다 (예비 순번 계산). 순서는 승격 후보 순서(findWaitingForUpdate)와 같다.
+     */
+    default List<Application> findWaitingIn(Collection<Long> helpRequestIds) {
+        return findByHelpRequestIdInAndStatusInApplyOrder(helpRequestIds, ApplicationStatus.WAITING);
+    }
+
+    @Query("""
+            select a from Application a
+            where a.helpRequest.id in :helpRequestIds and a.status = :status
+            order by a.helpRequest.id, a.appliedAt, a.id""")
+    List<Application> findByHelpRequestIdInAndStatusInApplyOrder(
+            @Param("helpRequestIds") Collection<Long> helpRequestIds,
+            @Param("status") ApplicationStatus status);
+
+    /**
      * 도우미의 봉사시간 합계. 봉사시간이 기록된 지원(이용 완료 1.0, 노쇼 0)만 더한다. 하나도 없으면 null.
      */
     @Query("select sum(a.volunteerHours) from Application a where a.helper.accountId = :helperId")
