@@ -178,6 +178,35 @@ public interface ApplicationRepository extends JpaRepository<Application, Long> 
                                                 Pageable pageable);
 
     /**
+     * 신청들의 지금 예비 인원 (관리자 전체 신청 현황). 예비가 없는 신청은 결과에 없다.
+     */
+    default List<HelpRequestApplicationCount> countWaitingByHelpRequest(Collection<Long> helpRequestIds) {
+        return countByHelpRequestIdInAndStatus(helpRequestIds, ApplicationStatus.WAITING);
+    }
+
+    @Query("""
+            select new com.hankkiatti.domain.application.repository.HelpRequestApplicationCount(a.helpRequest.id, count(a))
+            from Application a
+            where a.helpRequest.id in :helpRequestIds and a.status = :status
+            group by a.helpRequest.id""")
+    List<HelpRequestApplicationCount> countByHelpRequestIdInAndStatus(
+            @Param("helpRequestIds") Collection<Long> helpRequestIds,
+            @Param("status") ApplicationStatus status);
+
+    /**
+     * 신청들 중 예비가 승격돼 도우미 응답을 기다리는 신청의 ID (관리자 전체 신청 현황).
+     */
+    default List<Long> findHelpRequestIdsAwaitingPromotion(Collection<Long> helpRequestIds) {
+        return findHelpRequestIdsByStatus(helpRequestIds, ApplicationStatus.PROMOTION_PENDING);
+    }
+
+    @Query("""
+            select distinct a.helpRequest.id from Application a
+            where a.helpRequest.id in :helpRequestIds and a.status = :status""")
+    List<Long> findHelpRequestIdsByStatus(@Param("helpRequestIds") Collection<Long> helpRequestIds,
+                                          @Param("status") ApplicationStatus status);
+
+    /**
      * 도우미의 봉사시간 합계. 봉사시간이 기록된 지원(이용 완료 1.0, 노쇼 0)만 더한다. 하나도 없으면 null.
      */
     @Query("select sum(a.volunteerHours) from Application a where a.helper.accountId = :helperId")

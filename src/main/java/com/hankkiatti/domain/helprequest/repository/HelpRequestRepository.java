@@ -95,4 +95,30 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequest, Long> 
     List<Long> findEndedIdsWithStatus(@Param("now") LocalDateTime now,
                                       @Param("status") HelpRequestStatus status,
                                       Pageable pageable);
+
+    /**
+     * 관리자 전체 신청 현황: 식사 시작이 [start, endExclusive)인 신청을 장애학생과 함께, 식사 일시 오름차순.
+     * 상태·검색어(장애학생 이름·학번 부분 일치)는 없으면 거르지 않는다.
+     */
+    @Query("""
+            select r from HelpRequest r join fetch r.student s
+            where r.startAt >= :start and r.startAt < :endExclusive
+              and (:status is null or r.status = :status)
+              and (:pattern is null or s.name like :pattern or s.studentNo like :pattern)
+            order by r.startAt, r.id""")
+    List<HelpRequest> findForAdmin(@Param("start") LocalDateTime start,
+                                   @Param("endExclusive") LocalDateTime endExclusive,
+                                   @Param("status") HelpRequestStatus status,
+                                   @Param("pattern") String pattern);
+
+    /**
+     * 식사 시작이 [start, endExclusive)인 신청의 상태별 개수 (관리자 요약 숫자).
+     */
+    @Query("""
+            select new com.hankkiatti.domain.helprequest.repository.HelpRequestStatusCount(r.status, count(r))
+            from HelpRequest r
+            where r.startAt >= :start and r.startAt < :endExclusive
+            group by r.status""")
+    List<HelpRequestStatusCount> countByStatusBetween(@Param("start") LocalDateTime start,
+                                                     @Param("endExclusive") LocalDateTime endExclusive);
 }
