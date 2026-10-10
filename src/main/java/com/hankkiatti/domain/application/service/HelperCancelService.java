@@ -2,6 +2,7 @@ package com.hankkiatti.domain.application.service;
 
 import com.hankkiatti.domain.application.dto.request.HelperCancelRequestDto;
 import com.hankkiatti.domain.application.dto.response.HelperCancelResponseDto;
+import com.hankkiatti.domain.application.dto.response.MyApplicationResponseDto;
 import com.hankkiatti.domain.application.entity.Application;
 import com.hankkiatti.domain.application.entity.ApplicationAfterAction;
 import com.hankkiatti.domain.application.entity.ApplicationStatus;
@@ -21,8 +22,10 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 /**
- * 도우미 매칭 취소 (요구사항 4.4·4.5). 사유를 남기고, 예비가 있으면 지원 순으로 1번을 승격, 없으면 모집 재개.
- * 언제든 취소할 수 있지만 식사가 시작된 뒤에는 막는다 — 예비가 이미 종료돼 승격할 사람이 없다 (2026-10-09 결정).
+ * 도우미가 스스로 빠지는 동작 (요구사항 4.4).
+ * 매칭 취소: 사유를 남기고, 예비가 있으면 지원 순으로 1번을 승격, 없으면 모집 재개. 언제든 취소할 수 있지만 식사가 시작된
+ * 뒤에는 막는다 — 예비가 이미 종료돼 승격할 사람이 없다 (2026-10-09 결정).
+ * 예비 빠지기: 언제든, 사유·패널티 없음. 뒤 순번은 남은 예비를 세는 방식이라 저절로 당겨진다.
  */
 @Slf4j
 @Service
@@ -72,6 +75,28 @@ public class HelperCancelService {
         return new HelperCancelResponseDto(application.getId(), request.getId(), application.getStatus(),
                 request.getStartAt(), request.getEndAt(), request.getHelpTypes().stream().sorted().toList(),
                 application.getCancelReason(), application.getCanceledAt());
+    }
+
+    /**
+     * 예비 자리에서 빠진다. 같은 신청의 취소·승격과 신청 행에서 한 줄로 서므로, 승격이 먼저 처리됐으면 예비가 아니라 막힌다
+     * (매칭 완료는 매칭 취소, 승격 응답 대기는 승격 거절로 한다). 락 순서와 격리 수준은 취소와 같다.
+     */
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public MyApplicationResponseDto leave(Long helperId, Long applicationId) {
+        Long helpRequestId = applicationRepository.findHelpRequestIdByIdAndHelperId(applicationId, helperId)
+                .orElseThrow(() -> notFound(applicationId, helperId));
+        helpRequestRepository.findByIdForUpdate(helpRequestId)
+                .orElseThrow(() -> notFound(applicationId, helperId));
+        Application application = applicationRepository.findByIdForUpdate(applicationId)
+                .orElseThrow(() -> notFound(applicationId, helperId));
+
+        if (application.getStatus() != ApplicationStatus.WAITING) {
+            throw new ApplicationException(ApplicationErrorType.INVALID_STATUS,
+                    "applicationId=" + applicationId + ", status=" + application.getStatus());
+        }
+        application.withdraw(LocalDateTime.now(clock));
+        log.info("예비 빠지기: applicationId={}, helpRequestId={}, helperId={}", applicationId, helpRequestId, helperId);
+        return MyApplicationService.toCard(application, null);
     }
 
     private static ApplicationException notFound(Long applicationId, Long helperId) {

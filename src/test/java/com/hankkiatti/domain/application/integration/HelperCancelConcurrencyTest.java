@@ -40,7 +40,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
 /**
- * 도우미 취소·승격이 지원과 동시에 일어나도 매칭이 꼬이지 않는지 실제 트랜잭션·락으로 확인한다.
+ * 도우미 취소·승격·예비 빠지기가 지원·서로와 동시에 일어나도 매칭이 꼬이지 않는지 실제 트랜잭션·락으로 확인한다.
  * 경합은 타이밍에 따라 드러나므로 시나리오마다 여러 번 반복한다. 테스트마다 커밋하므로 끝나면 지운다.
  */
 @SpringBootTest
@@ -205,5 +205,52 @@ class HelperCancelConcurrencyTest {
                 .extracting(application -> application.getHelper().getAccountId()).isEqualTo(helperIds.get(1));
         assertThat(applicationsOf(requestId, ApplicationStatus.WAITING)).singleElement()
                 .extracting(application -> application.getHelper().getAccountId()).isEqualTo(helperIds.get(2));
+    }
+
+    @Test
+    void leave_앞도우미취소와예비1번빠지기가동시에_확정은한명이고빠진도우미는승격되지않는다() throws Exception {
+        for (int round = 0; round < ROUNDS; round++) {
+            // given — 도우미0 매칭, 도우미1·2 예비
+            Long requestId = saveRequest(tomorrowNoon.plusDays(round));
+            Long mine = applicationService.apply(helperIds.get(0), requestId).applicationId();
+            Long first = applicationService.apply(helperIds.get(1), requestId).applicationId();
+            applicationService.apply(helperIds.get(2), requestId);
+
+            // when — 도우미0 취소(예비1 승격)와 도우미1 빠지기가 동시에
+            List<Object> results = runConcurrently(List.of(
+                    () -> helperCancelService.cancel(helperIds.get(0), mine, ILLNESS),
+                    () -> helperCancelService.leave(helperIds.get(1), first)));
+
+            // then — 빠지기가 먼저면 도우미2가 승격, 취소가 먼저면 도우미1이 승격되고 빠지기는 409
+            assertThat(results.get(0)).isNotInstanceOf(Exception.class);
+            List<Application> matched = applicationsOf(requestId, ApplicationStatus.MATCHED);
+            assertThat(matched).hasSize(1);
+            Long matchedHelper = matched.get(0).getHelper().getAccountId();
+            if (matchedHelper.equals(helperIds.get(1))) {
+                assertThat(results.get(1)).isInstanceOf(ApplicationException.class)
+                        .extracting("errorCode").isEqualTo(ApplicationErrorType.INVALID_STATUS);
+            } else {
+                assertThat(matchedHelper).isEqualTo(helperIds.get(2));
+                assertThat(applicationRepository.findById(first).orElseThrow().getStatus())
+                        .isEqualTo(ApplicationStatus.WITHDRAWN);
+            }
+        }
+    }
+
+    @Test
+    void leave_같은빠지기를동시에두번_한번만처리() throws Exception {
+        // given — 도우미0 매칭, 도우미1 예비
+        Long requestId = saveRequest(tomorrowNoon);
+        applicationService.apply(helperIds.get(0), requestId);
+        Long first = applicationService.apply(helperIds.get(1), requestId).applicationId();
+        Callable<?> leave = () -> helperCancelService.leave(helperIds.get(1), first);
+
+        // when
+        List<Object> results = runConcurrently(List.of(leave, leave));
+
+        // then
+        assertThat(results).filteredOn(ApplicationException.class::isInstance).hasSize(1);
+        assertThat(applicationRepository.findById(first).orElseThrow().getStatus())
+                .isEqualTo(ApplicationStatus.WITHDRAWN);
     }
 }
