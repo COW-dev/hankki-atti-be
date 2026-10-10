@@ -19,10 +19,16 @@ import com.hankkiatti.domain.helprequest.entity.HelpType;
 import com.hankkiatti.domain.helprequest.repository.HelpRequestRepository;
 import com.hankkiatti.domain.helprequest.service.HelpRequestService;
 import com.hankkiatti.domain.helprequest.service.MealTimeService;
+import com.hankkiatti.domain.mail.entity.MailOutbox;
+import com.hankkiatti.domain.mail.entity.MailType;
+import com.hankkiatti.domain.mail.repository.MailOutboxRepository;
 import com.hankkiatti.domain.notification.entity.Notification;
 import com.hankkiatti.domain.notification.entity.NotificationTargetType;
 import com.hankkiatti.domain.notification.entity.NotificationType;
 import com.hankkiatti.domain.notification.repository.NotificationRepository;
+import com.hankkiatti.domain.sms.entity.SmsOutbox;
+import com.hankkiatti.domain.sms.entity.SmsType;
+import com.hankkiatti.domain.sms.repository.SmsOutboxRepository;
 import com.hankkiatti.domain.student.entity.Student;
 import com.hankkiatti.domain.student.repository.StudentRepository;
 import com.hankkiatti.support.TestProfiles;
@@ -30,6 +36,7 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.AfterEach;
@@ -66,6 +73,12 @@ class NotificationFlowIntegrationTest {
     private NotificationRepository notificationRepository;
 
     @Autowired
+    private MailOutboxRepository mailOutboxRepository;
+
+    @Autowired
+    private SmsOutboxRepository smsOutboxRepository;
+
+    @Autowired
     private AccountRepository accountRepository;
 
     @Autowired
@@ -97,7 +110,7 @@ class NotificationFlowIntegrationTest {
         studentId = student.getAccountId();
         for (int i = 0; i < 3; i++) {
             Account account = accountRepository.save(
-                    new Account("flow-helper" + i + "@mju.ac.kr", "hash", AccountRole.HELPER, false, false));
+                    new Account(helperEmail(i), "hash", AccountRole.HELPER, false, false));
             accountIds.add(account.getId());
             helperIds.add(helperRepository.save(TestProfiles.helper(account, "6025000" + i)).getAccountId());
         }
@@ -107,6 +120,8 @@ class NotificationFlowIntegrationTest {
     @AfterEach
     void tearDown() {
         notificationRepository.deleteAll();
+        mailOutboxRepository.deleteAll();
+        smsOutboxRepository.deleteAll();
         applicationRepository.deleteAll();
         helpRequestRepository.deleteAll();
         helperIds.forEach(helperRepository::deleteById);
@@ -126,6 +141,26 @@ class NotificationFlowIntegrationTest {
     private List<Notification> notificationsOf(Long recipientId) {
         List<Notification> newestFirst = notificationRepository.findPage(recipientId, null, 50);
         return newestFirst.reversed();
+    }
+
+    private static String helperEmail(int index) {
+        return "flow-helper" + index + "@mju.ac.kr";
+    }
+
+    // 받는 주소로 쌓인 메일 종류 (적재 순)
+    private List<MailType> mailsTo(String email) {
+        return mailOutboxRepository.findAll().stream()
+                .filter(mail -> mail.getRecipient().equals(email))
+                .sorted(Comparator.comparing(MailOutbox::getId))
+                .map(MailOutbox::getMailType).toList();
+    }
+
+    // 알림 이동 대상(신청·지원) ID로 쌓인 문자 종류 — 테스트 프로필은 전화번호가 같아 대상 ID로 구분한다
+    private List<SmsType> smsFor(Long referenceId) {
+        return smsOutboxRepository.findAll().stream()
+                .filter(sms -> referenceId.equals(sms.getReferenceId()))
+                .sorted(Comparator.comparing(SmsOutbox::getId))
+                .map(SmsOutbox::getSmsType).toList();
     }
 
     private List<NotificationType> typesOf(Long recipientId) {
@@ -154,6 +189,13 @@ class NotificationFlowIntegrationTest {
         assertThat(toWaiting.getType()).isEqualTo(NotificationType.WAITING_REGISTERED);
         assertThat(toWaiting.getTargetId()).isEqualTo(waiting);
         assertThat(toWaiting.getMessage()).contains("예비 1번");
+        // 급한 알림(매칭 완료)만 메일·문자도 — 예비 등록은 인앱만
+        assertThat(mailsTo("60239992@mju.ac.kr")).containsExactly(MailType.MATCHED);
+        assertThat(mailsTo(helperEmail(0))).containsExactly(MailType.MATCHED);
+        assertThat(mailsTo(helperEmail(1))).isEmpty();
+        assertThat(smsFor(requestId)).containsExactly(SmsType.MATCHED);
+        assertThat(smsFor(matched)).containsExactly(SmsType.MATCHED);
+        assertThat(smsFor(waiting)).isEmpty();
     }
 
     @Test
@@ -197,6 +239,10 @@ class NotificationFlowIntegrationTest {
         assertThat(toWaiting.get(2).getMessage()).startsWith("다시 알려 드려요.");
         assertThat(typesOf(studentId)).containsExactly(NotificationType.REQUEST_MATCHED,
                 NotificationType.HELPER_CHANGED);
+        // 승격 응답 요청은 첫 알림·재알림 모두 메일·문자로도, 도우미 바뀜은 인앱만
+        assertThat(mailsTo(helperEmail(1))).containsExactly(MailType.PROMOTED, MailType.PROMOTED);
+        assertThat(smsFor(waiting)).containsExactly(SmsType.PROMOTED, SmsType.PROMOTED);
+        assertThat(mailsTo("60239992@mju.ac.kr")).containsExactly(MailType.MATCHED);
     }
 
     @Test
@@ -217,6 +263,9 @@ class NotificationFlowIntegrationTest {
                 .extracting(Notification::getType, Notification::getTargetId)
                 .containsExactly(NotificationType.STUDENT_CANCELED, waiting);
         assertThat(typesOf(studentId)).containsExactly(NotificationType.REQUEST_MATCHED);
+        assertThat(mailsTo(helperEmail(0))).containsExactly(MailType.MATCHED, MailType.COUNTERPART_CANCELED);
+        assertThat(mailsTo(helperEmail(1))).containsExactly(MailType.COUNTERPART_CANCELED);
+        assertThat(smsFor(waiting)).containsExactly(SmsType.COUNTERPART_CANCELED);
     }
 
     @Test
@@ -232,6 +281,8 @@ class NotificationFlowIntegrationTest {
         assertThat(notificationsOf(studentId)).singleElement()
                 .extracting(Notification::getType, Notification::getTargetId)
                 .containsExactly(NotificationType.REQUEST_FAILED, requestId);
+        assertThat(mailsTo("60239992@mju.ac.kr")).containsExactly(MailType.MATCH_FAILED);
+        assertThat(smsFor(requestId)).containsExactly(SmsType.MATCH_FAILED);
     }
 
     @Test
@@ -265,5 +316,6 @@ class NotificationFlowIntegrationTest {
 
         // then
         assertThat(typesOf(helperIds.get(0))).containsExactly(NotificationType.APPLICATION_MATCHED);
+        assertThat(mailsTo(helperEmail(0))).containsExactly(MailType.MATCHED);
     }
 }
