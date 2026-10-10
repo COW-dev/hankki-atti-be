@@ -25,6 +25,7 @@ import com.hankkiatti.domain.mail.repository.MailOutboxRepository;
 import com.hankkiatti.domain.notification.entity.Notification;
 import com.hankkiatti.domain.notification.entity.NotificationTargetType;
 import com.hankkiatti.domain.notification.entity.NotificationType;
+import com.hankkiatti.domain.notification.repository.NotificationJobRepository;
 import com.hankkiatti.domain.notification.repository.NotificationRepository;
 import com.hankkiatti.domain.sms.entity.SmsOutbox;
 import com.hankkiatti.domain.sms.entity.SmsType;
@@ -73,6 +74,9 @@ class NotificationFlowIntegrationTest {
     private NotificationRepository notificationRepository;
 
     @Autowired
+    private NotificationJobRepository notificationJobRepository;
+
+    @Autowired
     private MailOutboxRepository mailOutboxRepository;
 
     @Autowired
@@ -119,6 +123,7 @@ class NotificationFlowIntegrationTest {
 
     @AfterEach
     void tearDown() {
+        notificationJobRepository.deleteAll();
         notificationRepository.deleteAll();
         mailOutboxRepository.deleteAll();
         smsOutboxRepository.deleteAll();
