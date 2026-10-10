@@ -1,64 +1,95 @@
 package com.hankkiatti.domain.notification.service;
 
+import com.hankkiatti.domain.notification.entity.NotificationType;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.TextStyle;
 import java.util.Locale;
+import org.springframework.context.support.ResourceBundleMessageSource;
+import org.springframework.stereotype.Component;
 
 /**
- * 인앱 알림 문장. 시각과 상태만 담는다 — 이름·장애 유형·특이사항·메모는 넣지 않는다.
- * 형식: "10월 12일(월) 12:00 식사 도우미가 매칭됐어요."
+ * 인앱 알림 문장. 문구는 messages/notification.properties에 있고(키 = 알림 종류), 여기서는 시각 형식과 자리표시자만 채운다.
+ * 형식: "10월 12일(월) 12:00 식사 도우미가 매칭됐어요." — 이름·장애 유형·특이사항·메모는 넣지 않는다.
  */
-final class NotificationMessages {
+@Component
+public class NotificationMessages {
 
+    private static final String BASENAME = "messages/notification";
+    private static final String KEY_PREFIX = "notification.";
+    private static final String REMINDER_SUFFIX = ".reminder";
     private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("HH:mm");
 
-    private NotificationMessages() {}
+    private final ResourceBundleMessageSource source = new ResourceBundleMessageSource();
 
-    static String requestMatched(LocalDateTime startAt) {
-        return when(startAt) + " 식사 도우미가 매칭됐어요.";
+    public NotificationMessages() {
+        source.setBasename(BASENAME);
+        source.setDefaultEncoding(StandardCharsets.UTF_8.name());
+        // 키가 없으면 키 이름을 문장으로 내보내지 않고 바로 예외 — 테스트에서 잡히게
+        source.setUseCodeAsDefaultMessage(false);
+        source.setFallbackToSystemLocale(false);
     }
 
-    static String helperChanged(LocalDateTime startAt) {
-        return when(startAt) + " 식사 도우미가 바뀌었어요.";
+    public String requestMatched(LocalDateTime startAt) {
+        return format(NotificationType.REQUEST_MATCHED, startAt);
     }
 
-    static String requestReopened(LocalDateTime startAt) {
-        return when(startAt) + " 신청의 도우미가 빠져 다시 모집 중이에요.";
+    public String helperChanged(LocalDateTime startAt) {
+        return format(NotificationType.HELPER_CHANGED, startAt);
     }
 
-    static String requestFailed(LocalDateTime startAt) {
-        return when(startAt) + " 신청에 도우미가 매칭되지 않았어요.";
+    public String requestReopened(LocalDateTime startAt) {
+        return format(NotificationType.REQUEST_REOPENED, startAt);
     }
 
-    static String applicationMatched(LocalDateTime startAt) {
-        return when(startAt) + " 식사 도우미로 매칭됐어요.";
+    public String requestFailed(LocalDateTime startAt) {
+        return format(NotificationType.REQUEST_FAILED, startAt);
     }
 
-    static String waitingRegistered(LocalDateTime startAt, int waitingOrder) {
-        return when(startAt) + " 신청에 예비 " + waitingOrder + "번으로 등록됐어요.";
+    public String applicationMatched(LocalDateTime startAt) {
+        return format(NotificationType.APPLICATION_MATCHED, startAt);
     }
 
-    static String promoted(LocalDateTime startAt) {
-        return when(startAt) + " 신청에 예비에서 매칭으로 승격됐어요.";
+    public String waitingRegistered(LocalDateTime startAt, int waitingOrder) {
+        // 숫자를 그대로 넘기면 MessageFormat이 천 단위 쉼표를 붙이므로 문자열로 넘긴다
+        return format(NotificationType.WAITING_REGISTERED, startAt, String.valueOf(waitingOrder));
     }
 
-    static String promotionResponseRequired(LocalDateTime startAt, LocalDateTime deadline, boolean reminder) {
-        String message = when(startAt) + " 신청에 예비에서 승격됐어요. " + deadline.format(TIME) + "까지 갈 수 있는지 알려 주세요.";
-        return reminder ? "다시 알려 드려요. " + message : message;
+    public String promoted(LocalDateTime startAt) {
+        return format(NotificationType.PROMOTED, startAt);
     }
 
-    static String studentCanceled(LocalDateTime startAt) {
-        return when(startAt) + " 신청이 장애학생 사정으로 취소됐어요.";
+    public String promotionResponseRequired(LocalDateTime startAt, LocalDateTime deadline, boolean reminder) {
+        String message = format(NotificationType.PROMOTION_RESPONSE_REQUIRED, startAt, deadline.format(TIME));
+        return reminder
+                ? message(KEY_PREFIX + NotificationType.PROMOTION_RESPONSE_REQUIRED.name() + REMINDER_SUFFIX, message)
+                : message;
     }
 
-    static String waitingExcluded(LocalDateTime startAt) {
-        return when(startAt) + " 예비 자리가 같은 시간 다른 매칭으로 빠졌어요.";
+    public String studentCanceled(LocalDateTime startAt) {
+        return format(NotificationType.STUDENT_CANCELED, startAt);
+    }
+
+    public String waitingExcluded(LocalDateTime startAt) {
+        return format(NotificationType.WAITING_EXCLUDED, startAt);
     }
 
     // "10월 12일(월) 12:00"
     static String when(LocalDateTime startAt) {
         String dayOfWeek = startAt.getDayOfWeek().getDisplayName(TextStyle.SHORT, Locale.KOREAN);
         return startAt.getMonthValue() + "월 " + startAt.getDayOfMonth() + "일(" + dayOfWeek + ") " + startAt.format(TIME);
+    }
+
+    // 알림 종류의 문구에 식사 시각({0})과 나머지 자리표시자({1}~)를 채운다
+    String format(NotificationType type, LocalDateTime startAt, String... rest) {
+        Object[] args = new Object[rest.length + 1];
+        args[0] = when(startAt);
+        System.arraycopy(rest, 0, args, 1, rest.length);
+        return message(KEY_PREFIX + type.name(), args);
+    }
+
+    private String message(String key, Object... args) {
+        return source.getMessage(key, args, Locale.KOREAN);
     }
 }

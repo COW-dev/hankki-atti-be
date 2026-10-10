@@ -63,7 +63,8 @@ class NotificationDispatcherTest {
 
     @BeforeEach
     void setUp() {
-        dispatcher = new NotificationDispatcher(applicationRepository, helpRequestRepository, notificationService);
+        dispatcher = new NotificationDispatcher(applicationRepository, helpRequestRepository, notificationService,
+                new NotificationMessages());
         Student student = TestHelpRequests.student("60231234");
         ReflectionTestUtils.setField(student, "accountId", STUDENT_ID);
         request = TestHelpRequests.request(student, NOON);
