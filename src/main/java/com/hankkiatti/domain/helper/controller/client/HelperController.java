@@ -1,4 +1,4 @@
-package com.hankkiatti.domain.helper.controller;
+package com.hankkiatti.domain.helper.controller.client;
 
 import com.hankkiatti.domain.helper.dto.request.HelperSignupRequestDto;
 import com.hankkiatti.domain.helper.dto.response.HelperSignupResponseDto;

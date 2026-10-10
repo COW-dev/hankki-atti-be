@@ -8,6 +8,8 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public enum HelperErrorType implements ErrorCode {
 
+    NOT_FOUND(404, "도우미를 찾을 수 없습니다."),
+    INVALID_PAGE(422, "페이지는 0 이상이어야 합니다."),
     DUPLICATE_EMAIL(409, "이미 가입된 이메일입니다."),
     DUPLICATE_STUDENT_NO(409, "이미 가입된 학번입니다."),
     // 같은 이메일·학번으로 동시에 가입이 들어와 DB 유니크 제약에 걸린 경우. 다시 보내면 중복 여부를 정확히 알려 준다

@@ -19,4 +19,13 @@ public final class PhoneNumbers {
         String digits = raw.replace("-", "").trim();
         return "+82" + digits.substring(1);
     }
+
+    // 010-1234-5678 → 010-****-5678. 목록처럼 번호가 필요 없는 화면에 준다 (상세에서 전체 번호)
+    public static String mask(String stored) {
+        String[] parts = stored.split("-");
+        if (parts.length != 3) {
+            return "*".repeat(stored.length());
+        }
+        return parts[0] + "-" + "*".repeat(parts[1].length()) + "-" + parts[2];
+    }
 }
