@@ -178,6 +178,35 @@ public interface ApplicationRepository extends JpaRepository<Application, Long> 
                                                 Pageable pageable);
 
     /**
+     * 신청들의 지금 예비 인원 (관리자 전체 신청 현황). 예비가 없는 신청은 결과에 없다.
+     */
+    default List<HelpRequestApplicationCount> countWaitingByHelpRequest(Collection<Long> helpRequestIds) {
+        return countByHelpRequestIdInAndStatus(helpRequestIds, ApplicationStatus.WAITING);
+    }
+
+    @Query("""
+            select new com.hankkiatti.domain.application.repository.HelpRequestApplicationCount(a.helpRequest.id, count(a))
+            from Application a
+            where a.helpRequest.id in :helpRequestIds and a.status = :status
+            group by a.helpRequest.id""")
+    List<HelpRequestApplicationCount> countByHelpRequestIdInAndStatus(
+            @Param("helpRequestIds") Collection<Long> helpRequestIds,
+            @Param("status") ApplicationStatus status);
+
+    /**
+     * 신청들 중 예비가 승격돼 도우미 응답을 기다리는 신청의 ID (관리자 전체 신청 현황).
+     */
+    default List<Long> findHelpRequestIdsAwaitingPromotion(Collection<Long> helpRequestIds) {
+        return findHelpRequestIdsByStatus(helpRequestIds, ApplicationStatus.PROMOTION_PENDING);
+    }
+
+    @Query("""
+            select distinct a.helpRequest.id from Application a
+            where a.helpRequest.id in :helpRequestIds and a.status = :status""")
+    List<Long> findHelpRequestIdsByStatus(@Param("helpRequestIds") Collection<Long> helpRequestIds,
+                                          @Param("status") ApplicationStatus status);
+
+    /**
      * 신청들의 지원 전부를 도우미와 함께 (관리자 장애학생 상세 — 매칭현황·취소·노쇼 이력). 한 학생의 신청이라 많지 않다.
      */
     @Query("select a from Application a join fetch a.helper where a.helpRequest.id in :helpRequestIds")

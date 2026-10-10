@@ -12,13 +12,10 @@ import com.hankkiatti.domain.helprequest.dto.response.OpenHelpRequestDateRespons
 import com.hankkiatti.domain.helprequest.dto.response.OpenHelpRequestResponseDto;
 import com.hankkiatti.domain.helprequest.entity.HelpRequest;
 import com.hankkiatti.domain.helprequest.entity.HelpRequestStatus;
-import com.hankkiatti.domain.helprequest.exception.HelpRequestErrorType;
-import com.hankkiatti.domain.helprequest.exception.HelpRequestException;
 import com.hankkiatti.domain.helprequest.repository.HelpRequestRepository;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -36,7 +33,6 @@ import org.springframework.transaction.annotation.Transactional;
 public class OpenHelpRequestService {
 
     // 한 번에 조회할 수 있는 최대 기간 (한 달치)
-    static final int MAX_RANGE_DAYS = 31;
 
     private final HelpRequestRepository helpRequestRepository;
     private final ApplicationRepository applicationRepository;
@@ -52,15 +48,9 @@ public class OpenHelpRequestService {
     public List<OpenHelpRequestDateResponseDto> getOpenRequests(Long accountId, LocalDate from, LocalDate to) {
         requireHelper(accountId);
         LocalDateTime now = LocalDateTime.now(clock);
-        LocalDate fromDate = from == null ? now.toLocalDate() : from;
-        LocalDate toDate = to == null ? fromDate.plusDays(HelpRequestSchedule.BOOKABLE_DAYS) : to;
-        if (toDate.isBefore(fromDate) || ChronoUnit.DAYS.between(fromDate, toDate) >= MAX_RANGE_DAYS) {
-            throw new HelpRequestException(HelpRequestErrorType.INVALID_DATE_RANGE,
-                    "from=" + fromDate + ", to=" + toDate);
-        }
+        HelpRequestDateRange range = HelpRequestDateRange.of(from, to, now.toLocalDate());
 
-        List<HelpRequest> requests = helpRequestRepository.findOpen(
-                fromDate.atStartOfDay(), toDate.plusDays(1).atStartOfDay(), now);
+        List<HelpRequest> requests = helpRequestRepository.findOpen(range.startInclusive(), range.endExclusive(), now);
         List<Application> myActive = applicationRepository.findActiveWithHelpRequestByHelperId(accountId);
 
         Map<LocalDate, List<OpenHelpRequestResponseDto>> byDate = requests.stream()
