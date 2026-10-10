@@ -10,7 +10,7 @@ import org.springframework.context.support.ResourceBundleMessageSource;
 import org.springframework.stereotype.Component;
 
 /**
- * 인앱 알림 문장. 문구는 messages/notification.properties에 있고(키 = 알림 종류), 여기서는 시각 형식과 자리표시자만 채운다.
+ * 알림 문장 (인앱·메일·문자). 문구는 messages/notification.properties에 있고(키 = 알림 종류), 여기서는 시각 형식과 자리표시자만 채운다.
  * 형식: "10월 12일(월) 12:00 식사 도우미가 매칭됐어요." — 이름·장애 유형·특이사항·메모는 넣지 않는다.
  */
 @Component
@@ -18,6 +18,8 @@ public class NotificationMessages {
 
     private static final String BASENAME = "messages/notification";
     private static final String KEY_PREFIX = "notification.";
+    private static final String MAIL_PREFIX = "mail.";
+    private static final String SMS_PREFIX = "sms.";
     private static final String REMINDER_SUFFIX = ".reminder";
     private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("HH:mm");
 
@@ -73,6 +75,27 @@ public class NotificationMessages {
 
     public String waitingExcluded(LocalDateTime startAt) {
         return format(NotificationType.WAITING_EXCLUDED, startAt);
+    }
+
+    // ---- 메일·문자 (급한 알림 4종) ----
+
+    public String mailSubject(NotificationType type, boolean reminder) {
+        return message(MAIL_PREFIX + type.name() + (reminder ? REMINDER_SUFFIX : "") + ".subject");
+    }
+
+    // 인앱 문장 + 앱 링크 1개 + 센터 연락처
+    public String mailBody(String message, String link) {
+        return message(MAIL_PREFIX + "body", message, link);
+    }
+
+    /**
+     * @param deadline 승격 응답 마감 (승격 응답 요청일 때만, 그 밖에는 null)
+     */
+    public String sms(NotificationType type, LocalDateTime startAt, LocalDateTime deadline, boolean reminder) {
+        String key = SMS_PREFIX + type.name() + (reminder ? REMINDER_SUFFIX : "");
+        return deadline == null
+                ? message(key, when(startAt))
+                : message(key, when(startAt), deadline.format(TIME));
     }
 
     // "10월 12일(월) 12:00"

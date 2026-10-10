@@ -23,6 +23,7 @@ import com.hankkiatti.domain.helprequest.event.HelpRequestReopenedEvent;
 import com.hankkiatti.domain.helprequest.repository.HelpRequestRepository;
 import com.hankkiatti.domain.notification.entity.NotificationTargetType;
 import com.hankkiatti.domain.notification.entity.NotificationType;
+import com.hankkiatti.domain.notification.service.NotificationOutboxSender.Recipient;
 import com.hankkiatti.domain.student.entity.Student;
 import com.hankkiatti.support.TestAccounts;
 import com.hankkiatti.support.TestHelpRequests;
@@ -56,20 +57,25 @@ class NotificationDispatcherTest {
     @Mock
     private NotificationService notificationService;
 
+    @Mock
+    private NotificationOutboxSender outboxSender;
+
     private NotificationDispatcher dispatcher;
 
     private HelpRequest request;
     private Application application;
+    private Student student;
+    private Helper helper;
 
     @BeforeEach
     void setUp() {
         dispatcher = new NotificationDispatcher(applicationRepository, helpRequestRepository, notificationService,
-                new NotificationMessages());
-        Student student = TestHelpRequests.student("60231234");
+                new NotificationMessages(), outboxSender);
+        student = TestHelpRequests.student("60231234");
         ReflectionTestUtils.setField(student, "accountId", STUDENT_ID);
         request = TestHelpRequests.request(student, NOON);
         ReflectionTestUtils.setField(request, "id", REQUEST_ID);
-        Helper helper = TestProfiles.helper(TestAccounts.withId(HELPER_ID, AccountRole.HELPER, "hash", false), "60230001");
+        helper = TestProfiles.helper(TestAccounts.withId(HELPER_ID, AccountRole.HELPER, "hash", false), "60230001");
         ReflectionTestUtils.setField(helper, "accountId", HELPER_ID);
         application = new Application(request, helper, NOON.minusDays(1));
         ReflectionTestUtils.setField(application, "id", APPLICATION_ID);
@@ -196,5 +202,37 @@ class NotificationDispatcherTest {
 
         // then
         verifyNoInteractions(notificationService);
+    }
+
+    @Test
+    void 메일문자_받는사람연락처와이동대상으로Sender에넘김() {
+        // given
+        givenApplication();
+
+        // when
+        dispatcher.helperConfirmed(confirmed(HelperConfirmedEvent.Kind.DIRECT_MATCH));
+
+        // then — 장애학생은 학교 이메일·등록 전화번호, 도우미는 가입 이메일·전화번호. 보낼지는 Sender가 종류로 정한다
+        verify(outboxSender).send(NotificationType.REQUEST_MATCHED,
+                new Recipient(student.getSchoolEmail(), student.getPhone()),
+                "10월 12일(월) 12:00 식사 도우미가 매칭됐어요.", NOON, null, false, REQUEST_ID);
+        verify(outboxSender).send(NotificationType.APPLICATION_MATCHED,
+                new Recipient(helper.getEmail(), helper.getPhone()),
+                "10월 12일(월) 12:00 식사 도우미로 매칭됐어요.", NOON, null, false, APPLICATION_ID);
+    }
+
+    @Test
+    void 승격응답요청_마감과재알림여부를Sender에넘김() {
+        // given
+        application.promote(NOON.minusMinutes(40), NOON.minusMinutes(15), NOON.minusMinutes(30));
+        givenApplication();
+
+        // when
+        dispatcher.promotionPending(new PromotionPendingEvent(APPLICATION_ID, true));
+
+        // then
+        verify(outboxSender).send(eq(NotificationType.PROMOTION_RESPONSE_REQUIRED),
+                eq(new Recipient(helper.getEmail(), helper.getPhone())), anyString(), eq(NOON),
+                eq(NOON.minusMinutes(15)), eq(true), eq(APPLICATION_ID));
     }
 }
