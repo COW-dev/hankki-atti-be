@@ -37,9 +37,11 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
-@ExtendWith(MockitoExtension.class)
+@ExtendWith({MockitoExtension.class, OutputCaptureExtension.class})
 class AdminStudentServiceTest {
 
     private static final Long ADMIN_ID = 1L;
@@ -193,11 +195,27 @@ class AdminStudentServiceTest {
         given(accountRepository.saveAndFlush(any(Account.class)))
                 .willThrow(new DataIntegrityViolationException("Duplicate entry for key 'login_id'"));
 
-        // when & then
+        // when & then — detail은 로그에 남으므로 학번을 넣지 않는다
         assertThatThrownBy(() -> adminStudentService.create(ADMIN_ID, request()))
                 .isInstanceOf(StudentException.class)
+                .satisfies(e -> assertThat(((StudentException) e).getDetail()).doesNotContain("60261234"))
                 .extracting("errorCode").isEqualTo(StudentErrorType.REGISTRATION_CONFLICT);
         verify(mailOutboxService, never()).enqueue(any(), anyString(), anyString(), anyString(), any());
+    }
+
+    @Test
+    void create_등록로그_학번없이계정ID만남긴다(CapturedOutput output) {
+        // given
+        givenFullAdmin();
+        given(passwordEncoder.encode(anyString())).willReturn("encoded-temporary-password");
+        givenSavedAccountGetsId(10L);
+
+        // when
+        adminStudentService.create(ADMIN_ID, request());
+
+        // then
+        assertThat(output.getOut()).contains("장애학생 등록: accountId=10");
+        assertThat(output.getOut()).doesNotContain("60261234");
     }
 
     @Test
