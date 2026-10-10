@@ -2,6 +2,7 @@ package com.hankkiatti.domain.notification.integration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.awaitility.Awaitility.await;
 
 import com.hankkiatti.domain.account.entity.Account;
 import com.hankkiatti.domain.account.entity.AccountRole;
@@ -34,6 +35,7 @@ import com.hankkiatti.domain.student.entity.Student;
 import com.hankkiatti.domain.student.repository.StudentRepository;
 import com.hankkiatti.support.TestProfiles;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -182,25 +184,27 @@ class NotificationFlowIntegrationTest {
         Long waiting = apply(1, requestId);
 
         // then — 장애학생 알림은 신청으로, 도우미 알림은 각자의 지원으로 이동한다
-        Notification toStudent = notificationsOf(studentId).getFirst();
-        assertThat(toStudent.getType()).isEqualTo(NotificationType.REQUEST_MATCHED);
-        assertThat(toStudent.getTargetType()).isEqualTo(NotificationTargetType.HELP_REQUEST);
-        assertThat(toStudent.getTargetId()).isEqualTo(requestId);
-        assertThat(typesOf(studentId)).containsExactly(NotificationType.REQUEST_MATCHED);
-        Notification toMatched = notificationsOf(helperIds.get(0)).getFirst();
-        assertThat(toMatched.getType()).isEqualTo(NotificationType.APPLICATION_MATCHED);
-        assertThat(toMatched.getTargetId()).isEqualTo(matched);
-        Notification toWaiting = notificationsOf(helperIds.get(1)).getFirst();
-        assertThat(toWaiting.getType()).isEqualTo(NotificationType.WAITING_REGISTERED);
-        assertThat(toWaiting.getTargetId()).isEqualTo(waiting);
-        assertThat(toWaiting.getMessage()).contains("예비 1번");
-        // 급한 알림(매칭 완료)만 메일·문자도 — 예비 등록은 인앱만
-        assertThat(mailsTo("60239992@mju.ac.kr")).containsExactly(MailType.MATCHED);
-        assertThat(mailsTo(helperEmail(0))).containsExactly(MailType.MATCHED);
-        assertThat(mailsTo(helperEmail(1))).isEmpty();
-        assertThat(smsFor(requestId)).containsExactly(SmsType.MATCHED);
-        assertThat(smsFor(matched)).containsExactly(SmsType.MATCHED);
-        assertThat(smsFor(waiting)).isEmpty();
+        await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
+            Notification toStudent = notificationsOf(studentId).getFirst();
+            assertThat(toStudent.getType()).isEqualTo(NotificationType.REQUEST_MATCHED);
+            assertThat(toStudent.getTargetType()).isEqualTo(NotificationTargetType.HELP_REQUEST);
+            assertThat(toStudent.getTargetId()).isEqualTo(requestId);
+            assertThat(typesOf(studentId)).containsExactly(NotificationType.REQUEST_MATCHED);
+            Notification toMatched = notificationsOf(helperIds.get(0)).getFirst();
+            assertThat(toMatched.getType()).isEqualTo(NotificationType.APPLICATION_MATCHED);
+            assertThat(toMatched.getTargetId()).isEqualTo(matched);
+            Notification toWaiting = notificationsOf(helperIds.get(1)).getFirst();
+            assertThat(toWaiting.getType()).isEqualTo(NotificationType.WAITING_REGISTERED);
+            assertThat(toWaiting.getTargetId()).isEqualTo(waiting);
+            assertThat(toWaiting.getMessage()).contains("예비 1번");
+            // 급한 알림(매칭 완료)만 메일·문자도 — 예비 등록은 인앱만
+            assertThat(mailsTo("60239992@mju.ac.kr")).containsExactly(MailType.MATCHED);
+            assertThat(mailsTo(helperEmail(0))).containsExactly(MailType.MATCHED);
+            assertThat(mailsTo(helperEmail(1))).isEmpty();
+            assertThat(smsFor(requestId)).containsExactly(SmsType.MATCHED);
+            assertThat(smsFor(matched)).containsExactly(SmsType.MATCHED);
+            assertThat(smsFor(waiting)).isEmpty();
+        });
     }
 
     @Test
@@ -215,12 +219,14 @@ class NotificationFlowIntegrationTest {
         helperCancelService.cancel(helperIds.get(1), waiting, ILLNESS);
 
         // then
-        assertThat(typesOf(studentId)).containsExactly(NotificationType.REQUEST_MATCHED,
-                NotificationType.HELPER_CHANGED, NotificationType.REQUEST_REOPENED);
-        assertThat(typesOf(helperIds.get(1))).containsExactly(NotificationType.WAITING_REGISTERED,
-                NotificationType.PROMOTED);
-        // 취소한 본인에게는 알림이 없다
-        assertThat(typesOf(helperIds.get(0))).containsExactly(NotificationType.APPLICATION_MATCHED);
+        await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
+            assertThat(typesOf(studentId)).containsExactly(NotificationType.REQUEST_MATCHED,
+                    NotificationType.HELPER_CHANGED, NotificationType.REQUEST_REOPENED);
+            assertThat(typesOf(helperIds.get(1))).containsExactly(NotificationType.WAITING_REGISTERED,
+                    NotificationType.PROMOTED);
+            // 취소한 본인에게는 알림이 없다
+            assertThat(typesOf(helperIds.get(0))).containsExactly(NotificationType.APPLICATION_MATCHED);
+        });
     }
 
     @Test
@@ -238,16 +244,20 @@ class NotificationFlowIntegrationTest {
         promotionResponseService.accept(helperIds.get(1), waiting);
 
         // then — 응답 대기 동안 장애학생에게는 도우미 바뀜을 보내지 않고, 수락한 뒤에 보낸다
-        List<Notification> toWaiting = notificationsOf(helperIds.get(1));
-        assertThat(toWaiting).extracting(Notification::getType).containsExactly(NotificationType.WAITING_REGISTERED,
-                NotificationType.PROMOTION_RESPONSE_REQUIRED, NotificationType.PROMOTION_RESPONSE_REQUIRED);
-        assertThat(toWaiting.get(2).getMessage()).startsWith("다시 알려 드려요.");
-        assertThat(typesOf(studentId)).containsExactly(NotificationType.REQUEST_MATCHED,
-                NotificationType.HELPER_CHANGED);
-        // 승격 응답 요청은 첫 알림·재알림 모두 메일·문자로도, 도우미 바뀜은 인앱만
-        assertThat(mailsTo(helperEmail(1))).containsExactly(MailType.PROMOTED, MailType.PROMOTED);
-        assertThat(smsFor(waiting)).containsExactly(SmsType.PROMOTED, SmsType.PROMOTED);
-        assertThat(mailsTo("60239992@mju.ac.kr")).containsExactly(MailType.MATCHED);
+        await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
+            List<Notification> toWaiting = notificationsOf(helperIds.get(1));
+            assertThat(toWaiting).extracting(Notification::getType).containsExactly(
+                    NotificationType.WAITING_REGISTERED,
+                    NotificationType.PROMOTION_RESPONSE_REQUIRED,
+                    NotificationType.PROMOTION_RESPONSE_REQUIRED);
+            assertThat(toWaiting.get(2).getMessage()).startsWith("다시 알려 드려요.");
+            assertThat(typesOf(studentId)).containsExactly(NotificationType.REQUEST_MATCHED,
+                    NotificationType.HELPER_CHANGED);
+            // 승격 응답 요청은 첫 알림·재알림 모두 메일·문자로도, 도우미 바뀜은 인앱만
+            assertThat(mailsTo(helperEmail(1))).containsExactly(MailType.PROMOTED, MailType.PROMOTED);
+            assertThat(smsFor(waiting)).containsExactly(SmsType.PROMOTED, SmsType.PROMOTED);
+            assertThat(mailsTo("60239992@mju.ac.kr")).containsExactly(MailType.MATCHED);
+        });
     }
 
     @Test
@@ -261,16 +271,18 @@ class NotificationFlowIntegrationTest {
         helpRequestService.cancelMatched(studentId, requestId);
 
         // then
-        assertThat(notificationsOf(helperIds.get(0)).getLast())
-                .extracting(Notification::getType, Notification::getTargetId)
-                .containsExactly(NotificationType.STUDENT_CANCELED, matched);
-        assertThat(notificationsOf(helperIds.get(1)).getLast())
-                .extracting(Notification::getType, Notification::getTargetId)
-                .containsExactly(NotificationType.STUDENT_CANCELED, waiting);
-        assertThat(typesOf(studentId)).containsExactly(NotificationType.REQUEST_MATCHED);
-        assertThat(mailsTo(helperEmail(0))).containsExactly(MailType.MATCHED, MailType.COUNTERPART_CANCELED);
-        assertThat(mailsTo(helperEmail(1))).containsExactly(MailType.COUNTERPART_CANCELED);
-        assertThat(smsFor(waiting)).containsExactly(SmsType.COUNTERPART_CANCELED);
+        await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
+            assertThat(notificationsOf(helperIds.get(0)).getLast())
+                    .extracting(Notification::getType, Notification::getTargetId)
+                    .containsExactly(NotificationType.STUDENT_CANCELED, matched);
+            assertThat(notificationsOf(helperIds.get(1)).getLast())
+                    .extracting(Notification::getType, Notification::getTargetId)
+                    .containsExactly(NotificationType.STUDENT_CANCELED, waiting);
+            assertThat(typesOf(studentId)).containsExactly(NotificationType.REQUEST_MATCHED);
+            assertThat(mailsTo(helperEmail(0))).containsExactly(MailType.MATCHED, MailType.COUNTERPART_CANCELED);
+            assertThat(mailsTo(helperEmail(1))).containsExactly(MailType.COUNTERPART_CANCELED);
+            assertThat(smsFor(waiting)).containsExactly(SmsType.COUNTERPART_CANCELED);
+        });
     }
 
     @Test
@@ -283,11 +295,13 @@ class NotificationFlowIntegrationTest {
         mealTimeService.startMeal(requestId, startAt);
 
         // then
-        assertThat(notificationsOf(studentId)).singleElement()
-                .extracting(Notification::getType, Notification::getTargetId)
-                .containsExactly(NotificationType.REQUEST_FAILED, requestId);
-        assertThat(mailsTo("60239992@mju.ac.kr")).containsExactly(MailType.MATCH_FAILED);
-        assertThat(smsFor(requestId)).containsExactly(SmsType.MATCH_FAILED);
+        await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
+            assertThat(notificationsOf(studentId)).singleElement()
+                    .extracting(Notification::getType, Notification::getTargetId)
+                    .containsExactly(NotificationType.REQUEST_FAILED, requestId);
+            assertThat(mailsTo("60239992@mju.ac.kr")).containsExactly(MailType.MATCH_FAILED);
+            assertThat(smsFor(requestId)).containsExactly(SmsType.MATCH_FAILED);
+        });
     }
 
     @Test
@@ -302,12 +316,15 @@ class NotificationFlowIntegrationTest {
         apply(1, open);
 
         // then — 매칭 알림과 자동 제외 알림은 같은 이벤트를 받는 서로 다른 리스너가 쌓아 둘의 순서는 정해져 있지 않다
-        List<Notification> toHelper = notificationsOf(helperIds.get(1));
-        assertThat(toHelper).extracting(Notification::getType).containsExactlyInAnyOrder(
-                NotificationType.WAITING_REGISTERED, NotificationType.APPLICATION_MATCHED,
-                NotificationType.WAITING_EXCLUDED);
-        assertThat(toHelper).filteredOn(notification -> notification.getType() == NotificationType.WAITING_EXCLUDED)
-                .singleElement().extracting(Notification::getTargetId).isEqualTo(waiting);
+        await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
+            List<Notification> toHelper = notificationsOf(helperIds.get(1));
+            assertThat(toHelper).extracting(Notification::getType).containsExactlyInAnyOrder(
+                    NotificationType.WAITING_REGISTERED, NotificationType.APPLICATION_MATCHED,
+                    NotificationType.WAITING_EXCLUDED);
+            assertThat(toHelper)
+                    .filteredOn(notification -> notification.getType() == NotificationType.WAITING_EXCLUDED)
+                    .singleElement().extracting(Notification::getTargetId).isEqualTo(waiting);
+        });
     }
 
     @Test
@@ -320,7 +337,9 @@ class NotificationFlowIntegrationTest {
         assertThatThrownBy(() -> apply(0, requestId)).isInstanceOf(ApplicationException.class);
 
         // then
-        assertThat(typesOf(helperIds.get(0))).containsExactly(NotificationType.APPLICATION_MATCHED);
-        assertThat(mailsTo(helperEmail(0))).containsExactly(MailType.MATCHED);
+        await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
+            assertThat(typesOf(helperIds.get(0))).containsExactly(NotificationType.APPLICATION_MATCHED);
+            assertThat(mailsTo(helperEmail(0))).containsExactly(MailType.MATCHED);
+        });
     }
 }

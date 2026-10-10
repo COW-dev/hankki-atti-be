@@ -66,7 +66,7 @@ class AuthServiceTest {
     void loginUser_올바른아이디비밀번호_토큰과변경필요여부반환() {
         // given
         Account student = TestAccounts.withId(1L, AccountRole.STUDENT, "hash", true);
-        given(accountRepository.findByLoginId("60231234")).willReturn(Optional.of(student));
+        given(accountRepository.findByLoginIdForUpdate("60231234")).willReturn(Optional.of(student));
         given(passwordEncoder.matches("pw", "hash")).willReturn(true);
         given(authTokenService.issue(student, TokenAudience.USER, NOW)).willReturn(TOKENS);
 
@@ -84,7 +84,7 @@ class AuthServiceTest {
     @Test
     void loginUser_없는아이디_로그인실패하고비교는한번수행() {
         // given
-        given(accountRepository.findByLoginId("nobody")).willReturn(Optional.empty());
+        given(accountRepository.findByLoginIdForUpdate("nobody")).willReturn(Optional.empty());
         given(passwordEncoder.encode(anyString())).willReturn("dummy-hash");
 
         // when & then
@@ -98,7 +98,7 @@ class AuthServiceTest {
     void loginUser_비밀번호틀림_로그인실패() {
         // given
         Account helper = TestAccounts.withId(2L, AccountRole.HELPER, "hash", false);
-        given(accountRepository.findByLoginId("helper@mju.ac.kr")).willReturn(Optional.of(helper));
+        given(accountRepository.findByLoginIdForUpdate("helper@mju.ac.kr")).willReturn(Optional.of(helper));
         given(passwordEncoder.matches("wrong", "hash")).willReturn(false);
 
         // when & then
@@ -112,7 +112,7 @@ class AuthServiceTest {
         // given
         Account student = TestAccounts.withId(1L, AccountRole.STUDENT, "hash", false);
         student.deactivate(NOW.minusDays(1));
-        given(accountRepository.findByLoginId("60231234")).willReturn(Optional.of(student));
+        given(accountRepository.findByLoginIdForUpdate("60231234")).willReturn(Optional.of(student));
         given(passwordEncoder.matches("pw", "hash")).willReturn(true);
 
         // when & then
@@ -126,7 +126,7 @@ class AuthServiceTest {
         // given
         Account student = TestAccounts.withId(1L, AccountRole.STUDENT, "hash", false);
         student.deactivate(NOW.minusDays(1));
-        given(accountRepository.findByLoginId("60231234")).willReturn(Optional.of(student));
+        given(accountRepository.findByLoginIdForUpdate("60231234")).willReturn(Optional.of(student));
         given(passwordEncoder.matches("wrong", "hash")).willReturn(false);
 
         // when & then
@@ -139,7 +139,7 @@ class AuthServiceTest {
     void loginUser_관리자계정으로사용자로그인_로그인실패() {
         // given
         Account admin = TestAccounts.withId(3L, AccountRole.ADMIN, "hash", false);
-        given(accountRepository.findByLoginId("center01")).willReturn(Optional.of(admin));
+        given(accountRepository.findByLoginIdForUpdate("center01")).willReturn(Optional.of(admin));
         given(passwordEncoder.encode(anyString())).willReturn("dummy-hash");
 
         // when & then
@@ -153,7 +153,7 @@ class AuthServiceTest {
     void loginAdmin_관리자계정_이름과권한등급반환() {
         // given
         Account account = TestAccounts.withId(3L, AccountRole.ADMIN, "hash", false);
-        given(accountRepository.findByLoginId("center01")).willReturn(Optional.of(account));
+        given(accountRepository.findByLoginIdForUpdate("center01")).willReturn(Optional.of(account));
         given(passwordEncoder.matches("pw", "hash")).willReturn(true);
         given(adminRepository.findById(3L)).willReturn(Optional.of(new Admin(account, "김센터", AdminGrade.LIMITED)));
         given(authTokenService.issue(account, TokenAudience.ADMIN, NOW)).willReturn(TOKENS);
@@ -170,7 +170,7 @@ class AuthServiceTest {
     void loginAdmin_관리자프로필없음_로그인실패() {
         // given
         Account account = TestAccounts.withId(3L, AccountRole.ADMIN, "hash", false);
-        given(accountRepository.findByLoginId("center01")).willReturn(Optional.of(account));
+        given(accountRepository.findByLoginIdForUpdate("center01")).willReturn(Optional.of(account));
         given(passwordEncoder.matches("pw", "hash")).willReturn(true);
         given(adminRepository.findById(3L)).willReturn(Optional.empty());
 
@@ -206,7 +206,7 @@ class AuthServiceTest {
     void changePassword_첫로그인변경_변경필요해제하고다른기기로그아웃() {
         // given
         Account student = TestAccounts.withId(1L, AccountRole.STUDENT, "initial-hash", true);
-        given(accountRepository.findById(1L)).willReturn(Optional.of(student));
+        given(accountRepository.findByIdForUpdate(1L)).willReturn(Optional.of(student));
         given(passwordEncoder.matches("initial!1", "initial-hash")).willReturn(true);
         given(passwordEncoder.matches("newPass!2", "initial-hash")).willReturn(false);
         given(passwordEncoder.encode("newPass!2")).willReturn("new-hash");
@@ -228,7 +228,7 @@ class AuthServiceTest {
     void changePassword_현재비밀번호틀림_예외() {
         // given
         Account student = TestAccounts.withId(1L, AccountRole.STUDENT, "hash", true);
-        given(accountRepository.findById(1L)).willReturn(Optional.of(student));
+        given(accountRepository.findByIdForUpdate(1L)).willReturn(Optional.of(student));
         given(passwordEncoder.matches("wrong", "hash")).willReturn(false);
 
         // when & then
@@ -241,7 +241,7 @@ class AuthServiceTest {
     void changePassword_현재와같은비밀번호_예외() {
         // given
         Account student = TestAccounts.withId(1L, AccountRole.STUDENT, "hash", true);
-        given(accountRepository.findById(1L)).willReturn(Optional.of(student));
+        given(accountRepository.findByIdForUpdate(1L)).willReturn(Optional.of(student));
         given(passwordEncoder.matches("same!Pw1", "hash")).willReturn(true);
 
         // when & then
@@ -254,11 +254,26 @@ class AuthServiceTest {
     @Test
     void changePassword_계정없음_인증필요() {
         // given
-        given(accountRepository.findById(9L)).willReturn(Optional.empty());
+        given(accountRepository.findByIdForUpdate(9L)).willReturn(Optional.empty());
 
         // when & then
         assertThatThrownBy(() -> authService.changePassword(9L, new PasswordChangeRequestDto("a", "b")))
                 .isInstanceOf(AuthException.class)
                 .extracting("errorCode").isEqualTo(AuthErrorType.UNAUTHENTICATED);
+    }
+
+    @Test
+    void changePassword_비활성계정_사용중지안내() {
+        // given
+        Account student = TestAccounts.withId(1L, AccountRole.STUDENT, "hash", true);
+        student.deactivate(NOW.minusMinutes(1));
+        given(accountRepository.findByIdForUpdate(1L)).willReturn(Optional.of(student));
+
+        // when & then
+        assertThatThrownBy(() -> authService.changePassword(1L,
+                new PasswordChangeRequestDto("current!1", "newPass!2")))
+                .isInstanceOf(AuthException.class)
+                .extracting("errorCode").isEqualTo(AuthErrorType.ACCOUNT_DEACTIVATED);
+        verify(passwordEncoder, never()).matches(anyString(), anyString());
     }
 }

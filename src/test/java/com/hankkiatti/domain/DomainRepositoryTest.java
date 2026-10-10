@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.hankkiatti.domain.account.entity.Account;
 import com.hankkiatti.domain.account.entity.AccountRole;
+import com.hankkiatti.domain.account.entity.AccountStatus;
 import com.hankkiatti.domain.account.repository.AccountRepository;
 import com.hankkiatti.domain.application.entity.Application;
 import com.hankkiatti.domain.application.repository.ApplicationRepository;
@@ -17,6 +18,7 @@ import com.hankkiatti.domain.student.entity.CredentialMailStatus;
 import com.hankkiatti.domain.student.entity.DisabilityType;
 import com.hankkiatti.domain.student.entity.Student;
 import com.hankkiatti.domain.student.repository.StudentRepository;
+import com.hankkiatti.domain.student.repository.StudentRecentRequestProjection;
 import com.hankkiatti.global.config.JpaConfig;
 import jakarta.persistence.EntityManager;
 import java.time.LocalDateTime;
@@ -118,6 +120,93 @@ class DomainRepositoryTest {
         assertThat(found.getCredentialMailStatus()).isEqualTo(CredentialMailStatus.PENDING);
         assertThat(studentRepository.existsByStudentNo("60201234")).isTrue();
         assertThat(studentRepository.existsByStudentNo("60209999")).isFalse();
+    }
+
+    @Test
+    void search_이름학번검색과장애유형계정상태필터_조건에맞는학생만조회() {
+        // given
+        Student active = saveStudent();
+        Account inactiveAccount = saveAccount("60209999", AccountRole.STUDENT);
+        inactiveAccount.deactivate(NOW);
+        Student inactive = studentRepository.save(new Student(
+                inactiveAccount,
+                "박학생",
+                "60209999",
+                "010-9999-9999",
+                "park",
+                "park@mju.ac.kr",
+                DisabilityType.HEARING,
+                null));
+        flushAndClear();
+
+        // when
+        List<Student> byName = studentRepository.search(
+                "김학", DisabilityType.VISUAL, AccountStatus.ACTIVE);
+        List<Student> byStudentNo = studentRepository.search(
+                "9999", DisabilityType.HEARING, AccountStatus.INACTIVE);
+
+        // then
+        assertThat(byName).extracting(Student::getAccountId).containsExactly(active.getAccountId());
+        assertThat(byStudentNo).extracting(Student::getAccountId).containsExactly(inactive.getAccountId());
+        assertThat(byName).allSatisfy(student -> assertThat(Hibernate.isInitialized(student.getAccount())).isTrue());
+    }
+
+    @Test
+    void findRecentRequestAtByStudentIds_학생별가장최근식사시작시각조회() {
+        // given
+        Student student = saveStudent();
+        helpRequestRepository.save(new HelpRequest(
+                student, NOW.plusHours(2), Set.of(HelpType.SERVING), null, null));
+        helpRequestRepository.save(new HelpRequest(
+                student, NOW.plusDays(1), Set.of(HelpType.SEATING), null, null));
+        flushAndClear();
+
+        // when
+        List<StudentRecentRequestProjection> result = helpRequestRepository.findRecentRequestAtByStudentIds(
+                List.of(student.getAccountId()));
+
+        // then
+        assertThat(result).singleElement().satisfies(recent -> {
+            assertThat(recent.getStudentAccountId()).isEqualTo(student.getAccountId());
+            assertThat(recent.getRecentRequestAt()).isEqualTo(NOW.plusDays(1));
+        });
+    }
+
+    @Test
+    void 계정비활성화대상조회_진행중신청과활성지원만조회() {
+        // given
+        Student student = saveStudent();
+        Helper helper = saveHelper();
+        HelpRequest recruiting = helpRequestRepository.save(new HelpRequest(
+                student, NOW.plusDays(1), Set.of(HelpType.SERVING), null, null));
+        HelpRequest matched = new HelpRequest(
+                student, NOW.plusDays(2), Set.of(HelpType.SEATING), null, null);
+        matched.match(NOW);
+        helpRequestRepository.save(matched);
+        HelpRequest canceled = new HelpRequest(
+                student, NOW.plusDays(3), Set.of(HelpType.MOVING), null, null);
+        canceled.withdraw(NOW);
+        helpRequestRepository.save(canceled);
+
+        Application matchedApplication = new Application(matched, helper, NOW);
+        matchedApplication.match(NOW);
+        Application waitingApplication = new Application(matched, helper, NOW.plusMinutes(1));
+        Application completedApplication = new Application(matched, helper, NOW.minusDays(1));
+        completedApplication.match(NOW.minusDays(1));
+        completedApplication.complete();
+        applicationRepository.save(matchedApplication);
+        applicationRepository.save(waitingApplication);
+        applicationRepository.save(completedApplication);
+        flushAndClear();
+
+        // when
+        List<Long> requestIds = helpRequestRepository.findActiveIdsByStudentAccountId(student.getAccountId());
+        List<Application> applications = applicationRepository.findActiveForUpdate(matched.getId());
+
+        // then
+        assertThat(requestIds).containsExactly(recruiting.getId(), matched.getId());
+        assertThat(applications).extracting(Application::getId)
+                .containsExactly(matchedApplication.getId(), waitingApplication.getId());
     }
 
     @Test
