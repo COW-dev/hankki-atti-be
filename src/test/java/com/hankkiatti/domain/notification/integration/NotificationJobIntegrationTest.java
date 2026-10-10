@@ -1,6 +1,7 @@
 package com.hankkiatti.domain.notification.integration;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -29,6 +30,7 @@ import com.hankkiatti.domain.student.entity.Student;
 import com.hankkiatti.domain.student.repository.StudentRepository;
 import com.hankkiatti.support.TestProfiles;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
@@ -148,10 +150,12 @@ class NotificationJobIntegrationTest {
         failRequestInTransaction(false);
 
         // then
-        NotificationJob job = onlyJob();
-        assertThat(job.getType()).isEqualTo(NotificationJobType.REQUEST_FAILED);
-        assertThat(job.getStatus()).isEqualTo(NotificationJobStatus.DONE);
-        assertThat(notificationTypes()).containsExactly(NotificationType.REQUEST_FAILED);
+        await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
+            NotificationJob job = onlyJob();
+            assertThat(job.getType()).isEqualTo(NotificationJobType.REQUEST_FAILED);
+            assertThat(job.getStatus()).isEqualTo(NotificationJobStatus.DONE);
+            assertThat(notificationTypes()).containsExactly(NotificationType.REQUEST_FAILED);
+        });
     }
 
     @Test
@@ -175,17 +179,20 @@ class NotificationJobIntegrationTest {
         failRequestInTransaction(false);
 
         // then — 업무는 끝났고, 작업은 1분 뒤 재시도로 남았다. 알림·메일은 함께 롤백돼 없다
-        NotificationJob failed = onlyJob();
-        assertThat(failed.getStatus()).isEqualTo(NotificationJobStatus.PENDING);
-        assertThat(failed.getAttempts()).isEqualTo(1);
-        assertThat(failed.getLastError()).isEqualTo("db down");
-        assertThat(notificationTypes()).isEmpty();
-        assertThat(mailOutboxRepository.count()).isZero();
+        await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
+            NotificationJob failed = onlyJob();
+            assertThat(failed.getStatus()).isEqualTo(NotificationJobStatus.PENDING);
+            assertThat(failed.getAttempts()).isEqualTo(1);
+            assertThat(failed.getLastError()).isEqualTo("db down");
+            assertThat(notificationTypes()).isEmpty();
+            assertThat(mailOutboxRepository.count()).isZero();
+        });
 
         // when — 장애가 풀리고 재시도 시각이 되어 폴러가 돈다
         willCallRealMethod().given(notificationService)
                 .notify(anyLong(), any(NotificationType.class), anyString(), any(NotificationTargetType.class),
                         anyLong());
+        NotificationJob failed = onlyJob();
         makeDueNow(failed);
         notificationJobRelay.processDue();
 

@@ -3,6 +3,7 @@ package com.hankkiatti.domain.helprequest.repository;
 import com.hankkiatti.domain.application.entity.ApplicationStatus;
 import com.hankkiatti.domain.helprequest.entity.HelpRequest;
 import com.hankkiatti.domain.helprequest.entity.HelpRequestStatus;
+import com.hankkiatti.domain.student.repository.StudentRecentRequestProjection;
 import jakarta.persistence.LockModeType;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -24,6 +25,25 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequest, Long> 
     Optional<HelpRequest> findByIdForUpdate(@Param("id") Long id);
 
     List<HelpRequest> findByStudentAccountId(Long studentId);
+
+    default List<Long> findActiveIdsByStudentAccountId(Long studentId) {
+        return findIdsByStudentAccountIdAndStatusIn(studentId, HelpRequestStatus.IN_PROGRESS);
+    }
+
+    @Query("""
+            select r.id from HelpRequest r
+            where r.student.accountId = :studentId and r.status in :statuses
+            order by r.id""")
+    List<Long> findIdsByStudentAccountIdAndStatusIn(@Param("studentId") Long studentId,
+                                                    @Param("statuses") List<HelpRequestStatus> statuses);
+
+    @Query("""
+            select r.student.accountId as studentAccountId, max(r.startAt) as recentRequestAt
+            from HelpRequest r
+            where r.student.accountId in :studentIds
+            group by r.student.accountId""")
+    List<StudentRecentRequestProjection> findRecentRequestAtByStudentIds(
+            @Param("studentIds") List<Long> studentIds);
 
     /**
      * 장애학생의 진행 중인 신청(모집 중·매칭 완료) 가운데 [start, end)와 구간이 겹치는 것이 있는지.

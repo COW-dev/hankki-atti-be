@@ -70,8 +70,13 @@ public class AuthService {
      */
     @Transactional
     public AuthResult<TokenResponseDto> changePassword(Long accountId, PasswordChangeRequestDto request) {
-        Account account = accountRepository.findById(accountId)
+        // 관리자 비활성화·초기 비밀번호 재발급과 같은 계정 변경을 한 줄로 세운다
+        Account account = accountRepository.findByIdForUpdate(accountId)
                 .orElseThrow(() -> new AuthException(AuthErrorType.UNAUTHENTICATED, "accountId=" + accountId));
+
+        if (!account.isActive()) {
+            throw new AuthException(AuthErrorType.ACCOUNT_DEACTIVATED, "accountId=" + accountId);
+        }
 
         if (!passwordEncoder.matches(request.currentPassword(), account.getPasswordHash())) {
             throw new AuthException(AuthErrorType.CURRENT_PASSWORD_MISMATCH);
@@ -92,7 +97,8 @@ public class AuthService {
      * 아이디·비밀번호가 틀리면 같은 응답을 준다. 비활성 계정 안내는 비밀번호가 맞을 때만 준다 — 계정 존재 여부가 드러나지 않게.
      */
     private Account authenticate(LoginRequestDto request, TokenAudience audience) {
-        Account account = accountRepository.findByLoginId(Account.normalizeLoginId(request.loginId()))
+        // 로그인 기록 저장이 관리자 비활성화를 오래된 활성 상태로 덮지 않도록 계정을 잠근다
+        Account account = accountRepository.findByLoginIdForUpdate(Account.normalizeLoginId(request.loginId()))
                 .filter(found -> audience.allows(found.getRole()))
                 .orElse(null);
 
