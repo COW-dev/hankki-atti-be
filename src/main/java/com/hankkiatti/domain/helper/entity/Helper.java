@@ -50,6 +50,9 @@ public class Helper extends BaseTimeEntity {
     @Column(nullable = false)
     private LocalDateTime guideConfirmedAt;
 
+    // 문자 수신 동의 시각. NULL이면 미동의 — 문자 알림을 보내지 않는다 (메일·인앱은 그대로)
+    private LocalDateTime smsConsentedAt;
+
     public Helper(Account account, String name, String studentNo, String email, String phone,
                   String kakaoId, boolean attiMember, LocalDateTime guideConfirmedAt) {
         this.account = account;
@@ -65,5 +68,22 @@ public class Helper extends BaseTimeEntity {
     public void updateContact(String phone, String kakaoId) {
         this.phone = phone;
         this.kakaoId = kakaoId;
+    }
+
+    /**
+     * 문자 수신 동의를 바꾼다. 동의하면 그 시각, 철회하면 비운다.
+     *
+     * @return 실제로 바뀌었으면 true (이미 같은 상태면 false — 이력을 남기지 않는다)
+     */
+    public boolean changeSmsConsent(boolean consent, LocalDateTime now) {
+        if (consent == (smsConsentedAt != null)) {
+            return false;
+        }
+        this.smsConsentedAt = consent ? now : null;
+        return true;
+    }
+
+    public boolean isSmsConsented() {
+        return smsConsentedAt != null;
     }
 }

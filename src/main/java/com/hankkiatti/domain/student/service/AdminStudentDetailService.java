@@ -75,7 +75,7 @@ public class AdminStudentDetailService {
         return new AdminStudentInfoResponseDto(student.getAccountId(), student.getName(), student.getStudentNo(),
                 account.getStatus(), student.getDisabilityType(), student.getPhone(), student.getSchoolEmail(),
                 student.getKakaoId(), account.getLoginId(), account.isAccessibilityMode(), student.getCreatedAt(),
-                student.getCredentialMailStatus(), student.getSpecialNote());
+                student.getCredentialMailStatus(), student.getSpecialNote(), student.getSmsConsentedAt());
     }
 
     /**

@@ -10,6 +10,8 @@ import com.hankkiatti.domain.helper.entity.Helper;
 import com.hankkiatti.domain.helper.exception.HelperErrorType;
 import com.hankkiatti.domain.helper.exception.HelperException;
 import com.hankkiatti.domain.helper.repository.HelperRepository;
+import com.hankkiatti.domain.sms.entity.SmsConsentSource;
+import com.hankkiatti.domain.sms.service.SmsConsentHistory;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
@@ -32,6 +34,7 @@ public class HelperSignupService {
     private final AccountRepository accountRepository;
     private final HelperRepository helperRepository;
     private final PasswordEncoder passwordEncoder;
+    private final SmsConsentHistory smsConsentHistory;
     private final Clock clock;
 
     @Transactional
@@ -47,11 +50,13 @@ public class HelperSignupService {
         }
 
         Account account;
+        Helper helper;
+        LocalDateTime now = LocalDateTime.now(clock);
         try {
             // 유니크 제약 위반을 여기서 잡으려고 바로 flush한다
             account = accountRepository.saveAndFlush(
                     new Account(loginId, passwordEncoder.encode(request.password()), AccountRole.HELPER, false, false));
-            helperRepository.saveAndFlush(new Helper(
+            helper = helperRepository.saveAndFlush(new Helper(
                     account,
                     request.name().trim(),
                     studentNo,
@@ -59,10 +64,15 @@ public class HelperSignupService {
                     PhoneNumbers.normalize(request.phone()),
                     request.kakaoId(),
                     Boolean.TRUE.equals(request.attiMember()),
-                    LocalDateTime.now(clock)));
+                    now));
         } catch (DataIntegrityViolationException exception) {
             throw new HelperException(HelperErrorType.SIGNUP_CONFLICT);
         }
+
+        // 문자 수신 동의는 선택. 동의하지 않아도 첫 상태를 이력에 남긴다
+        boolean smsConsent = Boolean.TRUE.equals(request.smsConsent());
+        helper.changeSmsConsent(smsConsent, now);
+        smsConsentHistory.record(account, smsConsent, SmsConsentSource.SIGNUP, null);
 
         // 이메일·전화번호는 로그에 남기지 않는다
         log.info("도우미 가입: accountId={}", account.getId());

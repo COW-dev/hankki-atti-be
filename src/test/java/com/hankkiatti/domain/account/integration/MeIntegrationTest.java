@@ -1,5 +1,6 @@
 package com.hankkiatti.domain.account.integration;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -19,6 +20,8 @@ import com.hankkiatti.domain.helper.entity.Helper;
 import com.hankkiatti.domain.helper.repository.HelperRepository;
 import com.hankkiatti.domain.helprequest.entity.HelpRequest;
 import com.hankkiatti.domain.helprequest.repository.HelpRequestRepository;
+import com.hankkiatti.domain.sms.entity.SmsConsentChange;
+import com.hankkiatti.domain.sms.repository.SmsConsentChangeRepository;
 import com.hankkiatti.domain.student.entity.Student;
 import com.hankkiatti.domain.student.repository.StudentRepository;
 import com.hankkiatti.support.TestHelpRequests;
@@ -67,6 +70,9 @@ class MeIntegrationTest {
 
     @Autowired
     private ApplicationRepository applicationRepository;
+
+    @Autowired
+    private SmsConsentChangeRepository smsConsentChangeRepository;
 
     @Autowired
     private PasswordEncoder passwordEncoder;
@@ -214,6 +220,40 @@ class MeIntegrationTest {
         mockMvc.perform(get("/api/me").header(HttpHeaders.AUTHORIZATION, token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.accessibilityMode").value(true));
+    }
+
+    @Test
+    void 문자수신동의_장애학생본인이동의하고거부하면내정보와이력에반영() throws Exception {
+        // given
+        Student student = saveStudent("60231234", false);
+        String token = loginBearer("/api/auth/login", "60231234");
+
+        // when & then — 동의
+        mockMvc.perform(patch("/api/me/sms-consent")
+                        .header(HttpHeaders.AUTHORIZATION, token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"consent\":true}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.smsConsent").value(true))
+                .andExpect(jsonPath("$.data.smsConsentedAt").isNotEmpty());
+
+        // 거부 → 다시 조회해도 미동의
+        mockMvc.perform(patch("/api/me/sms-consent")
+                        .header(HttpHeaders.AUTHORIZATION, token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"consent\":false}"))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/me").header(HttpHeaders.AUTHORIZATION, token))
+                .andExpect(jsonPath("$.data.smsConsent").value(false))
+                .andExpect(jsonPath("$.data.smsConsentedAt").doesNotExist());
+        assertThat(smsConsentChangeRepository.findByAccountIdOrderByIdAsc(student.getAccountId()))
+                .extracting(SmsConsentChange::isConsented)
+                .containsExactly(true, false);
+        mockMvc.perform(patch("/api/me/sms-consent")
+                        .header(HttpHeaders.AUTHORIZATION, token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isUnprocessableContent());
     }
 
     @Test

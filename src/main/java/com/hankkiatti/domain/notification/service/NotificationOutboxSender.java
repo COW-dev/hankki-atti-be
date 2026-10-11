@@ -57,6 +57,10 @@ public class NotificationOutboxSender {
         }
         mailOutboxService.enqueue(mailType, to.email(), messages.mailSubject(type, reminder),
                 messages.mailBody(inAppMessage, appLink()), referenceId);
+        if (to.phone() == null) {
+            // 문자 수신에 동의하지 않았다 — 메일·인앱만 (BE-83)
+            return;
+        }
         smsOutboxService.enqueue(SMS_TYPES.get(type), to.phone(),
                 messages.sms(type, startAt, deadline, reminder), referenceId);
     }
@@ -68,6 +72,7 @@ public class NotificationOutboxSender {
 
     /**
      * 받는 사람 연락처. 장애학생은 학교 이메일·등록 전화번호, 도우미는 가입 이메일·전화번호 (요구사항 6장).
+     * 문자 수신에 동의하지 않았으면 phone은 null — 문자를 보내지 않는다.
      */
     public record Recipient(String email, String phone) {}
 }

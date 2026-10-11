@@ -52,5 +52,8 @@ public record HelperSignupRequestDto(
         @NotNull
         @AssertTrue(message = "장애 유형별 안내 자료를 모두 확인해야 가입할 수 있습니다.")
         @Schema(description = "장애 유형별 안내 자료를 모두 확인했는지. true여야 가입된다", example = "true")
-        Boolean guideConfirmed
+        Boolean guideConfirmed,
+
+        @Schema(description = "알림 문자 수신 동의 (선택). 보내지 않으면 false — 동의하지 않으면 문자 대신 메일·앱 알림만 받는다", example = "true")
+        Boolean smsConsent
 ) {}

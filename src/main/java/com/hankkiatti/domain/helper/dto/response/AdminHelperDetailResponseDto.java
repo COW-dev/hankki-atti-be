@@ -15,5 +15,6 @@ public record AdminHelperDetailResponseDto(
         @Schema(description = "전화번호 (긴급 연락용)", example = "010-3333-3333") String phone,
         @Schema(description = "카톡 ID", example = "yunth") String kakaoId,
         @Schema(description = "가입 시각", example = "2026-09-11T10:00:00") LocalDateTime joinedAt,
+        @Schema(description = "알림 문자 수신 동의 시각. 없으면 미동의 — 문자 대신 메일·앱 알림만", example = "2026-09-11T10:00:00") LocalDateTime smsConsentedAt,
         @Schema(description = "활동 요약") AdminHelperSummaryResponseDto summary
 ) {}

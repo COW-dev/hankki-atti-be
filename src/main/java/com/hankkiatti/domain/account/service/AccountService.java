@@ -2,6 +2,7 @@ package com.hankkiatti.domain.account.service;
 
 import com.hankkiatti.domain.account.dto.request.MeContactUpdateRequestDto;
 import com.hankkiatti.domain.account.dto.request.MeSettingsUpdateRequestDto;
+import com.hankkiatti.domain.account.dto.request.MeSmsConsentUpdateRequestDto;
 import com.hankkiatti.domain.account.dto.response.MeHelperResponseDto;
 import com.hankkiatti.domain.account.dto.response.MeResponseDto;
 import com.hankkiatti.domain.account.entity.Account;
@@ -15,10 +16,14 @@ import com.hankkiatti.domain.auth.exception.AuthException;
 import com.hankkiatti.domain.common.PhoneNumbers;
 import com.hankkiatti.domain.helper.entity.Helper;
 import com.hankkiatti.domain.helper.repository.HelperRepository;
+import com.hankkiatti.domain.sms.entity.SmsConsentSource;
+import com.hankkiatti.domain.sms.service.SmsConsentHistory;
 import com.hankkiatti.domain.student.entity.Student;
 import com.hankkiatti.domain.student.repository.StudentRepository;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Clock;
+import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,6 +39,8 @@ public class AccountService {
     private final StudentRepository studentRepository;
     private final HelperRepository helperRepository;
     private final ApplicationRepository applicationRepository;
+    private final SmsConsentHistory smsConsentHistory;
+    private final Clock clock;
 
     @Transactional(readOnly = true)
     public MeResponseDto getMe(Long accountId) {
@@ -47,6 +54,26 @@ public class AccountService {
     public MeResponseDto updateSettings(Long accountId, MeSettingsUpdateRequestDto request) {
         Account account = findAccount(accountId);
         account.changeAccessibilityMode(request.accessibilityMode());
+        return toMeResponse(account);
+    }
+
+    /**
+     * 알림 문자 수신 동의·거부 (장애학생·도우미 모두 — 장애학생 연락처는 센터가 관리하지만 수신 거부는 본인이 정한다, 2026-10-11).
+     * 실제로 바뀌었을 때만 이력을 남긴다.
+     */
+    @Transactional
+    public MeResponseDto updateSmsConsent(Long accountId, MeSmsConsentUpdateRequestDto request) {
+        Account account = findAccount(accountId);
+        boolean consent = request.consent();
+        LocalDateTime now = LocalDateTime.now(clock);
+        boolean changed = switch (account.getRole()) {
+            case STUDENT -> findStudent(account).changeSmsConsent(consent, now);
+            case HELPER -> findHelper(account).changeSmsConsent(consent, now);
+            case ADMIN -> throw new AuthException(AuthErrorType.ACCESS_DENIED, "관리자, accountId=" + accountId);
+        };
+        if (changed) {
+            smsConsentHistory.record(account, consent, SmsConsentSource.SELF, null);
+        }
         return toMeResponse(account);
     }
 
@@ -71,22 +98,25 @@ public class AccountService {
     private MeResponseDto toMeResponse(Account account) {
         return switch (account.getRole()) {
             case STUDENT -> {
-                Student student = studentRepository.findById(account.getId())
-                        .orElseThrow(() -> profileNotFound(account));
+                Student student = findStudent(account);
                 yield new MeResponseDto(account.getId(), account.getLoginId(), account.getRole(),
                         account.isAccessibilityMode(), student.getName(), student.getStudentNo(), student.getPhone(),
-                        student.getKakaoId(), null);
+                        student.getKakaoId(), student.isSmsConsented(), student.getSmsConsentedAt(), null);
             }
             case HELPER -> {
                 Helper helper = findHelper(account);
                 yield new MeResponseDto(account.getId(), account.getLoginId(), account.getRole(),
                         account.isAccessibilityMode(), helper.getName(), helper.getStudentNo(), helper.getPhone(),
-                        helper.getKakaoId(),
+                        helper.getKakaoId(), helper.isSmsConsented(), helper.getSmsConsentedAt(),
                         new MeHelperResponseDto(helper.isAttiMember(), volunteerHoursOf(account)));
             }
             // 관리자는 /api/admin/me를 쓴다. 관리자 토큰은 SecurityConfig가 /api/**에서 막아 여기 오지 않는다
             case ADMIN -> throw new AuthException(AuthErrorType.ACCESS_DENIED, "관리자, accountId=" + account.getId());
         };
+    }
+
+    private Student findStudent(Account account) {
+        return studentRepository.findById(account.getId()).orElseThrow(() -> profileNotFound(account));
     }
 
     private Helper findHelper(Account account) {

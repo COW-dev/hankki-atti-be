@@ -2,6 +2,7 @@ package com.hankkiatti.domain.account.controller;
 
 import com.hankkiatti.domain.account.dto.request.MeContactUpdateRequestDto;
 import com.hankkiatti.domain.account.dto.request.MeSettingsUpdateRequestDto;
+import com.hankkiatti.domain.account.dto.request.MeSmsConsentUpdateRequestDto;
 import com.hankkiatti.domain.account.dto.response.MeResponseDto;
 import com.hankkiatti.global.response.ApiResult;
 import com.hankkiatti.global.security.AuthPrincipal;
@@ -32,6 +33,17 @@ public interface MeControllerDocs {
     ResponseEntity<ApiResult<MeResponseDto>> updateSettings(
             @Parameter(hidden = true) AuthPrincipal principal,
             MeSettingsUpdateRequestDto request);
+
+    @Operation(summary = "알림 문자 수신 동의 변경", description = """
+            장애학생·도우미가 알림 문자 수신에 동의하거나 거부한다. 거부하면 매칭 완료·승격·상대방 취소·매칭 실패를 문자 대신
+            메일·앱 알림으로만 받는다. 응답은 바뀐 내 정보(smsConsent·smsConsentedAt).""")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "저장 성공")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "로그인 필요")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "비밀번호 변경 필요")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "422", description = "consent 값이 없음")
+    ResponseEntity<ApiResult<MeResponseDto>> updateSmsConsent(
+            @Parameter(hidden = true) AuthPrincipal principal,
+            MeSmsConsentUpdateRequestDto request);
 
     @Operation(summary = "도우미 연락처 수정", description = """
             도우미가 자기 전화번호·카톡 ID를 바꾼다. 둘 다 보낸다 (지금 값을 채운 폼).
