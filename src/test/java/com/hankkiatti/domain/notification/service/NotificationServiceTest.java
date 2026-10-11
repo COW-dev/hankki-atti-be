@@ -166,4 +166,37 @@ class NotificationServiceTest {
         // when & then
         assertThat(notificationService.markAllRead(ME).readCount()).isEqualTo(3);
     }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void notifyAll_받는사람마다같은알림을한번에저장() {
+        // given
+        Account other = TestAccounts.withId(8L, AccountRole.STUDENT, "hash", false);
+        given(accountRepository.getReferenceById(ME)).willReturn(me);
+        given(accountRepository.getReferenceById(8L)).willReturn(other);
+
+        // when
+        notificationService.notifyAll(List.of(ME, 8L), NotificationType.NOTICE_PUBLISHED, "새 공지가 올라왔어요: 안내",
+                NotificationTargetType.NOTICE, 70L);
+
+        // then
+        ArgumentCaptor<List<Notification>> saved = ArgumentCaptor.forClass(List.class);
+        verify(notificationRepository).saveAll(saved.capture());
+        assertThat(saved.getValue()).extracting(Notification::getRecipient).containsExactly(me, other);
+        assertThat(saved.getValue()).allSatisfy(notification -> {
+            assertThat(notification.getType()).isEqualTo(NotificationType.NOTICE_PUBLISHED);
+            assertThat(notification.getTargetType()).isEqualTo(NotificationTargetType.NOTICE);
+            assertThat(notification.getTargetId()).isEqualTo(70L);
+        });
+    }
+
+    @Test
+    void notifyAll_받는사람없음_저장하지않음() {
+        // when
+        notificationService.notifyAll(List.of(), NotificationType.NOTICE_PUBLISHED, "새 공지가 올라왔어요: 안내",
+                NotificationTargetType.NOTICE, 70L);
+
+        // then
+        verify(notificationRepository, never()).saveAll(any());
+    }
 }

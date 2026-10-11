@@ -1,5 +1,6 @@
 package com.hankkiatti.domain.notification.service;
 
+import com.hankkiatti.domain.notification.entity.Notification;
 import com.hankkiatti.domain.notification.entity.NotificationType;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
@@ -22,6 +23,7 @@ public class NotificationMessages {
     private static final String SMS_PREFIX = "sms.";
     private static final String REMINDER_SUFFIX = ".reminder";
     private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("HH:mm");
+    private static final String ELLIPSIS = "…";
 
     private final ResourceBundleMessageSource source = new ResourceBundleMessageSource();
 
@@ -75,6 +77,19 @@ public class NotificationMessages {
 
     public String waitingExcluded(LocalDateTime startAt) {
         return format(NotificationType.WAITING_EXCLUDED, startAt);
+    }
+
+    /**
+     * 공지 게시. 제목이 길어 알림 문장 길이(200자)를 넘으면 제목 뒤를 "…"로 줄인다.
+     */
+    public String noticePublished(String title) {
+        String key = KEY_PREFIX + NotificationType.NOTICE_PUBLISHED.name();
+        String message = message(key, title);
+        if (message.length() <= Notification.MESSAGE_MAX_LENGTH) {
+            return message;
+        }
+        int titleRoom = Notification.MESSAGE_MAX_LENGTH - message(key, "").length() - ELLIPSIS.length();
+        return message(key, title.substring(0, titleRoom) + ELLIPSIS);
     }
 
     // ---- 메일·문자 (급한 알림 4종) ----

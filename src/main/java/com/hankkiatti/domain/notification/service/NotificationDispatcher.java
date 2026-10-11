@@ -6,6 +6,8 @@ import com.hankkiatti.domain.application.repository.ApplicationRepository;
 import com.hankkiatti.domain.helper.entity.Helper;
 import com.hankkiatti.domain.helprequest.entity.HelpRequest;
 import com.hankkiatti.domain.helprequest.repository.HelpRequestRepository;
+import com.hankkiatti.domain.notice.entity.Notice;
+import com.hankkiatti.domain.notice.repository.NoticeRepository;
 import com.hankkiatti.domain.notification.entity.NotificationJob;
 import com.hankkiatti.domain.notification.entity.NotificationTargetType;
 import com.hankkiatti.domain.notification.entity.NotificationType;
@@ -23,7 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * 알림 작업 하나를 받는 사람별 인앱 알림으로 바꿔 쌓는다 (요구사항 6장, Notion 기능명세서 "인앱 알림").
  * 새 트랜잭션에서 신청·지원을 다시 읽어 알림을 쌓고, 같은 트랜잭션에서 작업을 완료로 바꾼다 — 알림만 쌓이고 작업이 남아 다시 보내는 일이 없다.
- * 장애학생 알림은 신청으로, 도우미 알림은 그 도우미의 지원으로 이동한다. 급한 4종은 메일·문자 아웃박스에도 함께 적재한다 (BE-52).
+ * 장애학생 알림은 신청으로, 도우미 알림은 그 도우미의 지원으로, 공지 알림은 공지로 이동한다. 급한 4종은 메일·문자 아웃박스에도 함께 적재한다 (BE-52).
  */
 @Slf4j
 @Service
@@ -32,6 +34,7 @@ public class NotificationDispatcher {
 
     private final ApplicationRepository applicationRepository;
     private final HelpRequestRepository helpRequestRepository;
+    private final NoticeRepository noticeRepository;
     private final NotificationJobRepository notificationJobRepository;
     private final NotificationService notificationService;
     private final NotificationMessages messages;
@@ -56,6 +59,7 @@ public class NotificationDispatcher {
             case REQUEST_REOPENED -> requestReopened(targetId);
             case REQUEST_FAILED -> requestFailed(targetId);
             case STUDENT_CANCELED -> studentCanceled(targetId);
+            case NOTICE_PUBLISHED -> noticePublished(targetId);
         }
         job.markDone(now);
     }
@@ -137,6 +141,18 @@ public class NotificationDispatcher {
         findApplication(applicationId).ifPresent(application -> toHelper(application,
                 NotificationType.STUDENT_CANCELED,
                 messages.studentCanceled(application.getHelpRequest().getStartAt())));
+    }
+
+    // 공지 → 대상의 활성 장애학생·도우미 전원에게 인앱 알림만 (메일·문자 없음). 실패하면 통째로 롤백돼 재시도해도 중복이 없다
+    private void noticePublished(Long noticeId) {
+        Notice notice = noticeRepository.findById(noticeId).orElse(null);
+        if (notice == null || notice.isDeleted()) {
+            log.info("알림 대상 공지가 없거나 삭제됨: noticeId={}", noticeId);
+            return;
+        }
+        notificationService.notifyAll(noticeRepository.findRecipientAccountIds(notice.getTarget()),
+                NotificationType.NOTICE_PUBLISHED, messages.noticePublished(notice.getTitle()),
+                NotificationTargetType.NOTICE, noticeId);
     }
 
     // 장애학생 알림 → 신청. 급한 4종이면 학교 이메일·등록 전화번호로 메일·문자도
