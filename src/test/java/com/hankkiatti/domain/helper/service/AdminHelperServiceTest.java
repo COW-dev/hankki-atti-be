@@ -12,13 +12,17 @@ import static org.mockito.Mockito.verify;
 import com.hankkiatti.domain.account.entity.AccountRole;
 import com.hankkiatti.domain.account.entity.Account;
 import com.hankkiatti.domain.account.entity.AccountStatus;
+import com.hankkiatti.domain.admin.entity.Admin;
+import com.hankkiatti.domain.admin.entity.AdminGrade;
 import com.hankkiatti.domain.account.repository.AccountRepository;
 import com.hankkiatti.domain.application.entity.Application;
 import com.hankkiatti.domain.application.entity.ApplicationAfterAction;
 import com.hankkiatti.domain.application.entity.ApplicationStatus;
 import com.hankkiatti.domain.application.entity.CancelReason;
+import com.hankkiatti.domain.application.entity.VolunteerHourChange;
 import com.hankkiatti.domain.application.repository.ApplicationRepository;
 import com.hankkiatti.domain.application.repository.HelperApplicationCount;
+import com.hankkiatti.domain.application.repository.VolunteerHourChangeRepository;
 import com.hankkiatti.domain.auth.repository.PasswordResetTokenRepository;
 import com.hankkiatti.domain.helper.dto.response.AdminHelperActivityResponseDto;
 import com.hankkiatti.domain.helper.dto.response.AdminHelperDetailResponseDto;
@@ -71,6 +75,9 @@ class AdminHelperServiceTest {
     private ApplicationRepository applicationRepository;
 
     @Mock
+    private VolunteerHourChangeRepository volunteerHourChangeRepository;
+
+    @Mock
     private PasswordResetTokenRepository passwordResetTokenRepository;
 
     @Mock
@@ -90,7 +97,7 @@ class AdminHelperServiceTest {
     @BeforeEach
     void setUp() {
         service = new AdminHelperService(helperRepository, accountRepository, applicationRepository,
-                passwordResetTokenRepository, mailOutboxService, passwordEncoder, clock);
+                volunteerHourChangeRepository, passwordResetTokenRepository, mailOutboxService, passwordEncoder, clock);
         student = TestHelpRequests.student("60231234");
         ReflectionTestUtils.setField(student, "accountId", 1L);
         ReflectionTestUtils.setField(student, "name", "김민지");
@@ -367,5 +374,39 @@ class AdminHelperServiceTest {
                 .isInstanceOf(HelperException.class)
                 .extracting("errorCode").isEqualTo(HelperErrorType.NOT_FOUND);
         verify(passwordEncoder, never()).encode(anyString());
+    }
+
+    @Test
+    void getActivities_봉사시간과수정이력을최근순으로붙인다() {
+        // given
+        Application completed = matched(helper, NOON.minusDays(2));
+        completed.complete();
+        completed.changeVolunteerHours(new BigDecimal("1.5"));
+        Application matchedOnly = matched(helper, NOON.plusDays(1));
+        Admin admin = new Admin(TestAccounts.withId(100L, AccountRole.ADMIN, "hash", false), "김센터", AdminGrade.FULL);
+        VolunteerHourChange latest = new VolunteerHourChange(completed, admin, new BigDecimal("2.0"),
+                new BigDecimal("1.5"), "다시 확인해 보니 30분 짧았어요");
+        ReflectionTestUtils.setField(latest, "id", 2L);
+        ReflectionTestUtils.setField(latest, "createdAt", NOON.minusHours(1));
+        VolunteerHourChange first = new VolunteerHourChange(completed, admin, new BigDecimal("1.0"),
+                new BigDecimal("2.0"), "식사 보조가 길어졌어요");
+        ReflectionTestUtils.setField(first, "id", 1L);
+        given(helperRepository.findById(HELPER_ID)).willReturn(Optional.of(helper));
+        given(applicationRepository.findMineWithHelpRequest(HELPER_ID)).willReturn(List.of(completed, matchedOnly));
+        given(volunteerHourChangeRepository.findWithAdminByApplicationIdIn(List.of(completed.getId())))
+                .willReturn(List.of(latest, first));
+
+        // when
+        List<AdminHelperActivityResponseDto> activities = service.getActivities(HELPER_ID);
+
+        // then — 최근 식사부터: 매칭 완료(봉사시간 없음), 이용 완료
+        assertThat(activities.get(0).volunteerHours()).isNull();
+        assertThat(activities.get(0).volunteerHourChanges()).isEmpty();
+        AdminHelperActivityResponseDto row = activities.get(1);
+        assertThat(row.volunteerHours()).isEqualByComparingTo("1.5");
+        assertThat(row.volunteerHourChanges()).extracting("changeId").containsExactly(2L, 1L);
+        assertThat(row.volunteerHourChanges().get(0).adminName()).isEqualTo("김센터");
+        assertThat(row.volunteerHourChanges().get(0).beforeHours()).isEqualByComparingTo("2.0");
+        assertThat(row.volunteerHourChanges().get(0).changedAt()).isEqualTo(NOON.minusHours(1));
     }
 }
