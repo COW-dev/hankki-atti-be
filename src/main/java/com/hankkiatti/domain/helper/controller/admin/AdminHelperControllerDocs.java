@@ -3,15 +3,17 @@ package com.hankkiatti.domain.helper.controller.admin;
 import com.hankkiatti.domain.account.entity.AccountStatus;
 import com.hankkiatti.domain.helper.dto.response.AdminHelperActivityResponseDto;
 import com.hankkiatti.domain.helper.dto.response.AdminHelperDetailResponseDto;
+import com.hankkiatti.domain.helper.dto.response.AdminHelperTemporaryPasswordResponseDto;
 import com.hankkiatti.domain.helper.dto.response.AdminHelpersResponseDto;
 import com.hankkiatti.global.response.ApiResult;
+import com.hankkiatti.global.security.AuthPrincipal;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.List;
 import org.springframework.http.ResponseEntity;
 
-@Tag(name = "관리자 - 도우미", description = "도우미 목록·상세·활동 이력 (조회 전용, 전체·제한 권한 같은 응답). 정보 수정은 도우미 본인만")
+@Tag(name = "관리자 - 도우미", description = "도우미 목록·상세·활동 이력·임시 비밀번호 발송 (전체·제한 권한 같은 응답). 정보 수정은 도우미 본인만")
 public interface AdminHelperControllerDocs {
 
     @Operation(summary = "도우미 목록", description = """
@@ -47,5 +49,18 @@ public interface AdminHelperControllerDocs {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "AUTH_ACCESS_DENIED — 관리자가 아님")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "HELPER_NOT_FOUND — 없는 도우미")
     ResponseEntity<ApiResult<List<AdminHelperActivityResponseDto>>> getActivities(
+            @Parameter(description = "도우미 계정 ID") Long helperId);
+
+    @Operation(summary = "도우미 임시 비밀번호 발송", description = """
+            임시 비밀번호(12자)를 발급해 가입 이메일로 보낸다. 도우미는 다음 로그인 때 비밀번호를 바꿔야 한다(mustChangePassword).
+            기존 로그인은 모두 끊기고, 안 쓴 비밀번호 재설정 링크도 무효가 된다. 응답의 email은 보낸 주소다.
+            메일은 아웃박스로 보내며 발송 결과는 저장하지 않는다 — 받지 못했다면 다시 보낸다(다시 보내면 앞의 임시 비밀번호는 무효).""")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "발송 요청 성공")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "로그인 필요")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "AUTH_ACCESS_DENIED — 관리자가 아님")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "HELPER_NOT_FOUND — 없는 도우미")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "HELPER_INACTIVE — 비활성화된 도우미 (다시 활성화한 뒤 보낸다)")
+    ResponseEntity<ApiResult<AdminHelperTemporaryPasswordResponseDto>> issueTemporaryPassword(
+            @Parameter(hidden = true) AuthPrincipal principal,
             @Parameter(description = "도우미 계정 ID") Long helperId);
 }
