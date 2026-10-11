@@ -196,6 +196,14 @@ public class Application extends BaseTimeEntity {
         this.volunteerHours = NO_SHOW_VOLUNTEER_HOURS;
     }
 
+    /**
+     * 관리자가 봉사시간을 고친다 (이용 완료·노쇼만 — 노쇼는 신고만으로 0시간이 되어 센터가 바로잡을 길이 이것뿐이다). 상태는 그대로 둔다.
+     */
+    public void changeVolunteerHours(BigDecimal hours) {
+        requireStatus(ApplicationStatus.COMPLETED, ApplicationStatus.NO_SHOW);
+        this.volunteerHours = hours;
+    }
+
     public boolean isActive() {
         return status.isActive();
     }

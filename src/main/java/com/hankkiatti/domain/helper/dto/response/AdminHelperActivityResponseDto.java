@@ -1,11 +1,14 @@
 package com.hankkiatti.domain.helper.dto.response;
 
+import com.hankkiatti.domain.application.dto.response.VolunteerHourChangeResponseDto;
 import com.hankkiatti.domain.application.entity.ApplicationAfterAction;
 import com.hankkiatti.domain.application.entity.ApplicationStatus;
 import com.hankkiatti.domain.application.entity.CancelReason;
 import com.hankkiatti.domain.helprequest.entity.HelpRequestStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Schema(description = "도우미 활동 이력 한 줄 — 매칭되거나 승격된 지원")
 public record AdminHelperActivityResponseDto(
@@ -22,5 +25,7 @@ public record AdminHelperActivityResponseDto(
         @Schema(description = "노쇼 신고가 이용 완료 몇 분 뒤였는지", example = "180") Long minutesAfterCompletion,
         @Schema(description = "도우미 취소 뒤 처리 — 예비 승격 또는 모집 재개", example = "PROMOTED") ApplicationAfterAction afterAction,
         @Schema(description = "예비 승격이면 승격된 예비의 승격 당시 순번", example = "1") Integer promotedWaitingOrder,
-        @Schema(description = "그 신청의 지금 상태 — 모집 재개 뒤 매칭 성공·실패를 보여 줄 때 쓴다", example = "MATCHED") HelpRequestStatus requestStatus
+        @Schema(description = "그 신청의 지금 상태 — 모집 재개 뒤 매칭 성공·실패를 보여 줄 때 쓴다", example = "MATCHED") HelpRequestStatus requestStatus,
+        @Schema(description = "봉사시간 — 이용 완료·노쇼만 있다 (이용 완료 1.0, 노쇼 0, 관리자가 고쳤으면 그 값)", example = "1.5") BigDecimal volunteerHours,
+        @Schema(description = "봉사시간 수정 이력, 최근순 — 없으면 빈 목록") List<VolunteerHourChangeResponseDto> volunteerHourChanges
 ) {}

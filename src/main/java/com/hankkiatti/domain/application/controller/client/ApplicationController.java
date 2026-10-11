@@ -1,4 +1,4 @@
-package com.hankkiatti.domain.application.controller;
+package com.hankkiatti.domain.application.controller.client;
 
 import com.hankkiatti.domain.application.dto.request.HelperCancelRequestDto;
 import com.hankkiatti.domain.application.dto.response.ApplyResponseDto;

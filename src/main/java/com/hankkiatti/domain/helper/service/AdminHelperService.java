@@ -4,12 +4,15 @@ import com.hankkiatti.domain.account.entity.Account;
 import com.hankkiatti.domain.account.entity.AccountRole;
 import com.hankkiatti.domain.account.entity.AccountStatus;
 import com.hankkiatti.domain.account.repository.AccountRepository;
+import com.hankkiatti.domain.application.dto.response.VolunteerHourChangeResponseDto;
 import com.hankkiatti.domain.application.entity.Application;
 import com.hankkiatti.domain.application.entity.ApplicationAfterAction;
 import com.hankkiatti.domain.application.entity.ApplicationStatus;
 import com.hankkiatti.domain.application.entity.CancelReason;
 import com.hankkiatti.domain.application.repository.ApplicationRepository;
 import com.hankkiatti.domain.application.repository.HelperApplicationCount;
+import com.hankkiatti.domain.application.repository.VolunteerHourChangeRepository;
+import com.hankkiatti.domain.application.service.AdminVolunteerHourService;
 import com.hankkiatti.domain.auth.repository.PasswordResetTokenRepository;
 import com.hankkiatti.domain.auth.service.TemporaryPasswords;
 import com.hankkiatti.domain.common.PhoneNumbers;
@@ -64,6 +67,7 @@ public class AdminHelperService {
     private final HelperRepository helperRepository;
     private final AccountRepository accountRepository;
     private final ApplicationRepository applicationRepository;
+    private final VolunteerHourChangeRepository volunteerHourChangeRepository;
     private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final MailOutboxService mailOutboxService;
     private final PasswordEncoder passwordEncoder;
@@ -118,10 +122,12 @@ public class AdminHelperService {
                 .sorted(LATEST_MEAL_FIRST)
                 .toList();
         Map<Long, List<Application>> promotionsByRequest = promotionsAfterCancel(activities);
+        Map<Long, List<VolunteerHourChangeResponseDto>> changes = volunteerHourChanges(activities);
 
         return activities.stream()
                 .map(application -> toActivity(application,
-                        promotionsByRequest.getOrDefault(application.getHelpRequest().getId(), List.of())))
+                        promotionsByRequest.getOrDefault(application.getHelpRequest().getId(), List.of()),
+                        changes.getOrDefault(application.getId(), List.of())))
                 .toList();
     }
 
@@ -206,7 +212,22 @@ public class AdminHelperService {
                 .collect(Collectors.groupingBy(application -> application.getHelpRequest().getId()));
     }
 
-    private static AdminHelperActivityResponseDto toActivity(Application application, List<Application> promotions) {
+    // 봉사시간 수정 이력, 지원별 최근순
+    private Map<Long, List<VolunteerHourChangeResponseDto>> volunteerHourChanges(List<Application> activities) {
+        List<Long> ids = activities.stream()
+                .filter(application -> application.getVolunteerHours() != null)
+                .map(Application::getId)
+                .toList();
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        return volunteerHourChangeRepository.findWithAdminByApplicationIdIn(ids).stream()
+                .collect(Collectors.groupingBy(change -> change.getApplication().getId(),
+                        Collectors.mapping(AdminVolunteerHourService::toResponse, Collectors.toList())));
+    }
+
+    private static AdminHelperActivityResponseDto toActivity(Application application, List<Application> promotions,
+                                                             List<VolunteerHourChangeResponseDto> changes) {
         HelpRequest request = application.getHelpRequest();
         ApplicationStatus status = application.getStatus();
         boolean helperCanceled = status == ApplicationStatus.HELPER_CANCELED;
@@ -222,7 +243,7 @@ public class AdminHelperService {
                         : null,
                 application.getAfterAction(),
                 helperCanceled ? promotedWaitingOrder(application, promotions) : null,
-                request.getStatus());
+                request.getStatus(), application.getVolunteerHours(), changes);
     }
 
     // 도우미 취소와 다음 예비 승격은 한 트랜잭션에서 같은 시각으로 기록된다 — 취소 시각에 승격된 지원이 뒤를 이은 예비다
