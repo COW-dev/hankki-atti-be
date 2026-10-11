@@ -1,10 +1,14 @@
 package com.hankkiatti.domain.helper.controller.admin;
 
 import com.hankkiatti.domain.account.entity.AccountStatus;
+import com.hankkiatti.domain.helper.dto.response.AdminHelperAccountStatusResponseDto;
 import com.hankkiatti.domain.helper.dto.response.AdminHelperActivityResponseDto;
+import com.hankkiatti.domain.helper.dto.response.AdminHelperDeactivationPreviewResponseDto;
+import com.hankkiatti.domain.helper.dto.response.AdminHelperDeactivationResponseDto;
 import com.hankkiatti.domain.helper.dto.response.AdminHelperDetailResponseDto;
 import com.hankkiatti.domain.helper.dto.response.AdminHelperTemporaryPasswordResponseDto;
 import com.hankkiatti.domain.helper.dto.response.AdminHelpersResponseDto;
+import com.hankkiatti.domain.helper.service.AdminHelperDeactivationService;
 import com.hankkiatti.domain.helper.service.AdminHelperService;
 import com.hankkiatti.global.response.ApiResponse;
 import com.hankkiatti.global.response.ApiResult;
@@ -27,6 +31,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class AdminHelperController implements AdminHelperControllerDocs {
 
     private final AdminHelperService adminHelperService;
+    private final AdminHelperDeactivationService adminHelperDeactivationService;
 
     @Override
     @GetMapping
@@ -57,5 +62,30 @@ public class AdminHelperController implements AdminHelperControllerDocs {
             @PathVariable Long helperId) {
         return ApiResponse.of(SuccessType.SUCCESS,
                 adminHelperService.issueTemporaryPassword(principal.accountId(), helperId));
+    }
+
+    @Override
+    @GetMapping("/{helperId}/deactivation-preview")
+    public ResponseEntity<ApiResult<AdminHelperDeactivationPreviewResponseDto>> previewDeactivation(
+            @PathVariable Long helperId) {
+        return ApiResponse.of(SuccessType.SUCCESS, adminHelperDeactivationService.preview(helperId));
+    }
+
+    @Override
+    @PostMapping("/{helperId}/deactivate")
+    public ResponseEntity<ApiResult<AdminHelperDeactivationResponseDto>> deactivate(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @PathVariable Long helperId) {
+        return ApiResponse.of(SuccessType.SUCCESS,
+                adminHelperDeactivationService.deactivate(principal.accountId(), helperId));
+    }
+
+    @Override
+    @PostMapping("/{helperId}/activate")
+    public ResponseEntity<ApiResult<AdminHelperAccountStatusResponseDto>> activate(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @PathVariable Long helperId) {
+        return ApiResponse.of(SuccessType.SUCCESS,
+                adminHelperDeactivationService.activate(principal.accountId(), helperId));
     }
 }

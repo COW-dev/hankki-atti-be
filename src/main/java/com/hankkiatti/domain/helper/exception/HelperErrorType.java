@@ -12,6 +12,9 @@ public enum HelperErrorType implements ErrorCode {
     INVALID_PAGE(422, "페이지는 0 이상이어야 합니다."),
     // 비활성 도우미는 로그인이 막혀 있어 임시 비밀번호를 받아도 쓸 수 없다. 다시 활성화한 뒤 보낸다
     INACTIVE(409, "비활성화된 도우미입니다."),
+    // 이미 비활성이고 정리할 매칭·예비도 남지 않았다
+    ALREADY_INACTIVE(409, "이미 비활성화된 도우미입니다."),
+    ALREADY_ACTIVE(409, "이미 활성 상태인 도우미입니다."),
     DUPLICATE_EMAIL(409, "이미 가입된 이메일입니다."),
     DUPLICATE_STUDENT_NO(409, "이미 가입된 학번입니다."),
     // 같은 이메일·학번으로 동시에 가입이 들어와 DB 유니크 제약에 걸린 경우. 다시 보내면 중복 여부를 정확히 알려 준다

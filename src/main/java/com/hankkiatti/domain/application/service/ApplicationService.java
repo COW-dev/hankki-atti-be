@@ -45,7 +45,7 @@ public class ApplicationService {
     private final Clock clock;
 
     /**
-     * 락 순서: 신청 → 도우미. 같은 신청에 동시에 들어온 지원은 신청 락에서, 같은 도우미의 겹치는 지원은 도우미 락에서 한 줄로 선다.
+     * 락 순서: 신청 → 도우미. 같은 신청에 동시에 들어온 지원은 신청 락에서, 같은 도우미의 겹치는 지원·관리자 비활성화는 도우미 락에서 한 줄로 선다.
      * 두 락을 트랜잭션의 첫 쿼리로 둬서 MySQL(REPEATABLE READ)에서도 먼저 커밋된 지원까지 보고 판단한다.
      */
     @Transactional
@@ -55,6 +55,10 @@ public class ApplicationService {
                         "helpRequestId=" + helpRequestId));
         Helper helper = helperRepository.findByIdForUpdate(helperId)
                 .orElseThrow(() -> new AuthException(AuthErrorType.ACCESS_DENIED, "도우미 전용, accountId=" + helperId));
+        // 관리자 비활성화가 도우미 행을 잠근 뒤 커밋하므로, 그보다 늦게 잠근 지원은 여기서 막힌다 (해제 대상에서 빠지는 지원이 없게)
+        if (!helper.getAccount().isActive()) {
+            throw new AuthException(AuthErrorType.ACCOUNT_DEACTIVATED, "helperId=" + helperId);
+        }
 
         LocalDateTime now = LocalDateTime.now(clock);
         if (!request.getStatus().isInProgress() || !now.isBefore(request.getStartAt())) {

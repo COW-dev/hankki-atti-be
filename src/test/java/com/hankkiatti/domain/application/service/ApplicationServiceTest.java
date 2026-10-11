@@ -253,4 +253,18 @@ class ApplicationServiceTest {
                 .extracting("errorCode").isEqualTo(AuthErrorType.ACCESS_DENIED);
         verify(applicationRepository, never()).save(any());
     }
+
+    @Test
+    void apply_비활성도우미_ACCOUNT_DEACTIVATED이고지원을만들지않음() {
+        // given — 관리자 비활성화가 도우미 행을 먼저 잠그고 커밋한 뒤에 들어온 지원
+        HelpRequest request = request(REQUEST_ID, NOON);
+        me.getAccount().deactivate(NOW.minusMinutes(1));
+        givenLocked(request);
+
+        // when & then
+        assertThatThrownBy(() -> applicationService.apply(HELPER_ID, REQUEST_ID))
+                .isInstanceOf(AuthException.class)
+                .extracting("errorCode").isEqualTo(AuthErrorType.ACCOUNT_DEACTIVATED);
+        verify(applicationRepository, never()).save(any());
+    }
 }
