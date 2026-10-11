@@ -17,6 +17,8 @@ import com.hankkiatti.domain.helprequest.entity.HelpRequest;
 import com.hankkiatti.domain.helprequest.repository.HelpRequestRepository;
 import com.hankkiatti.domain.mail.entity.MailType;
 import com.hankkiatti.domain.mail.service.MailOutboxService;
+import com.hankkiatti.domain.sms.entity.SmsConsentSource;
+import com.hankkiatti.domain.sms.service.SmsConsentHistory;
 import com.hankkiatti.domain.student.dto.request.AdminStudentCreateRequestDto;
 import com.hankkiatti.domain.student.dto.request.AdminStudentUpdateRequestDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentAccountStatusResponseDto;
@@ -60,6 +62,7 @@ public class AdminStudentService {
     private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final MailOutboxService mailOutboxService;
     private final PasswordEncoder passwordEncoder;
+    private final SmsConsentHistory smsConsentHistory;
     private final Clock clock;
 
     @Transactional(readOnly = true)
@@ -81,7 +84,7 @@ public class AdminStudentService {
     @Transactional
     public AdminStudentInfoResponseDto update(Long adminAccountId, Long studentAccountId,
                                               AdminStudentUpdateRequestDto request) {
-        requireFullAdmin(adminAccountId);
+        Admin admin = requireFullAdmin(adminAccountId);
         Student student = studentRepository.findByIdForUpdate(studentAccountId)
                 .orElseThrow(() -> new StudentException(StudentErrorType.NOT_FOUND,
                         "studentAccountId=" + studentAccountId));
@@ -94,6 +97,11 @@ public class AdminStudentService {
                 trimToNull(request.specialNote()));
 
         log.info("장애학생 정보 수정: accountId={}", studentAccountId);
+        // 보내지 않으면 그대로. 실제로 바뀌었을 때만 이력을 남긴다
+        if (request.smsConsent() != null
+                && student.changeSmsConsent(request.smsConsent(), LocalDateTime.now(clock))) {
+            smsConsentHistory.record(student.getAccount(), request.smsConsent(), SmsConsentSource.ADMIN, admin);
+        }
         return toInfo(student);
     }
 
@@ -143,7 +151,7 @@ public class AdminStudentService {
 
     @Transactional
     public AdminStudentCreateResponseDto create(Long adminAccountId, AdminStudentCreateRequestDto request) {
-        requireFullAdmin(adminAccountId);
+        Admin admin = requireFullAdmin(adminAccountId);
 
         String studentNo = request.studentNo().trim();
         if (accountRepository.existsByLoginId(studentNo) || studentRepository.existsByStudentNo(studentNo)) {
@@ -180,6 +188,10 @@ public class AdminStudentService {
                 CREDENTIAL_MAIL_SUBJECT,
                 credentialMailBody(studentNo, temporaryPassword),
                 account.getId());
+        // 문자 수신 동의는 센터가 장애학생에게 받고 체크한다 (선택). 동의하지 않아도 첫 상태를 이력에 남긴다
+        boolean smsConsent = Boolean.TRUE.equals(request.smsConsent());
+        student.changeSmsConsent(smsConsent, LocalDateTime.now(clock));
+        smsConsentHistory.record(account, smsConsent, SmsConsentSource.ADMIN, admin);
         log.info("장애학생 등록: accountId={}", account.getId());
 
         return new AdminStudentCreateResponseDto(
@@ -240,12 +252,13 @@ public class AdminStudentService {
                 account.getId(), account.getLoginId(), student.getSchoolEmail(), student.getCredentialMailStatus());
     }
 
-    private void requireFullAdmin(Long adminAccountId) {
+    private Admin requireFullAdmin(Long adminAccountId) {
         Admin admin = requireAdmin(adminAccountId);
         if (!admin.isFull()) {
             throw new AuthException(AuthErrorType.ACCESS_DENIED,
                     "adminAccountId=" + adminAccountId + ", grade=" + admin.getGrade());
         }
+        return admin;
     }
 
     private Admin requireAdmin(Long adminAccountId) {
@@ -279,7 +292,8 @@ public class AdminStudentService {
                 account.isAccessibilityMode(),
                 student.getCreatedAt(),
                 student.getCredentialMailStatus(),
-                student.getSpecialNote());
+                student.getSpecialNote(),
+                student.getSmsConsentedAt());
     }
 
     private AdminStudentSummaryResponseDto toSummary(Student student, LocalDateTime recentRequestAt,

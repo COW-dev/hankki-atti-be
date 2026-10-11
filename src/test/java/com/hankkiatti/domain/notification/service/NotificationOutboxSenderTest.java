@@ -105,6 +105,18 @@ class NotificationOutboxSenderTest {
     }
 
     @Test
+    void send_문자수신미동의_메일만적재하고문자는건너뛴다() {
+        // when
+        sender.send(NotificationType.REQUEST_MATCHED, new Recipient("60231234@mju.ac.kr", null),
+                "10월 12일(월) 12:00 식사 도우미가 매칭됐어요.", NOON, null, false, 10L);
+
+        // then
+        verify(mailOutboxService).enqueue(eq(MailType.MATCHED), eq("60231234@mju.ac.kr"), anyString(), anyString(),
+                eq(10L));
+        verifyNoInteractions(smsOutboxService);
+    }
+
+    @Test
     void send_급하지않은알림_인앱만() {
         // when
         for (NotificationType type : EnumSet.complementOf(EnumSet.copyOf(URGENT))) {

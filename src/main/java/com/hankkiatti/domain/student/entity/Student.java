@@ -56,6 +56,9 @@ public class Student extends BaseTimeEntity {
 
     private LocalDateTime credentialMailSentAt;
 
+    // 문자 수신 동의 시각. NULL이면 미동의 — 문자 알림을 보내지 않는다 (메일·인앱은 그대로)
+    private LocalDateTime smsConsentedAt;
+
     public Student(Account account, String name, String studentNo, String phone, String kakaoId,
                    String schoolEmail, DisabilityType disabilityType, String specialNote) {
         this.account = account;
@@ -91,5 +94,22 @@ public class Student extends BaseTimeEntity {
 
     public void markCredentialMailFailed() {
         this.credentialMailStatus = CredentialMailStatus.FAILED;
+    }
+
+    /**
+     * 문자 수신 동의를 바꾼다. 동의하면 그 시각, 철회하면 비운다.
+     *
+     * @return 실제로 바뀌었으면 true (이미 같은 상태면 false — 이력을 남기지 않는다)
+     */
+    public boolean changeSmsConsent(boolean consent, LocalDateTime now) {
+        if (consent == (smsConsentedAt != null)) {
+            return false;
+        }
+        this.smsConsentedAt = consent ? now : null;
+        return true;
+    }
+
+    public boolean isSmsConsented() {
+        return smsConsentedAt != null;
     }
 }

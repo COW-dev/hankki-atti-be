@@ -4,9 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
 
+import com.hankkiatti.domain.account.dto.request.MeSmsConsentUpdateRequestDto;
 import com.hankkiatti.domain.account.entity.Account;
 import com.hankkiatti.domain.account.entity.AccountRole;
 import com.hankkiatti.domain.account.repository.AccountRepository;
+import com.hankkiatti.domain.account.service.AccountService;
 import com.hankkiatti.domain.application.dto.request.HelperCancelRequestDto;
 import com.hankkiatti.domain.application.entity.CancelReason;
 import com.hankkiatti.domain.application.exception.ApplicationException;
@@ -14,6 +16,7 @@ import com.hankkiatti.domain.application.repository.ApplicationRepository;
 import com.hankkiatti.domain.application.service.ApplicationService;
 import com.hankkiatti.domain.application.service.HelperCancelService;
 import com.hankkiatti.domain.application.service.PromotionResponseService;
+import com.hankkiatti.domain.helper.entity.Helper;
 import com.hankkiatti.domain.helper.repository.HelperRepository;
 import com.hankkiatti.domain.helprequest.entity.HelpRequest;
 import com.hankkiatti.domain.helprequest.entity.HelpType;
@@ -28,8 +31,10 @@ import com.hankkiatti.domain.notification.entity.NotificationTargetType;
 import com.hankkiatti.domain.notification.entity.NotificationType;
 import com.hankkiatti.domain.notification.repository.NotificationJobRepository;
 import com.hankkiatti.domain.notification.repository.NotificationRepository;
+import com.hankkiatti.domain.sms.entity.SmsConsentSource;
 import com.hankkiatti.domain.sms.entity.SmsOutbox;
 import com.hankkiatti.domain.sms.entity.SmsType;
+import com.hankkiatti.domain.sms.repository.SmsConsentChangeRepository;
 import com.hankkiatti.domain.sms.repository.SmsOutboxRepository;
 import com.hankkiatti.domain.student.entity.Student;
 import com.hankkiatti.domain.student.repository.StudentRepository;
@@ -100,6 +105,12 @@ class NotificationFlowIntegrationTest {
     private ApplicationRepository applicationRepository;
 
     @Autowired
+    private AccountService accountService;
+
+    @Autowired
+    private SmsConsentChangeRepository smsConsentChangeRepository;
+
+    @Autowired
     private Clock clock;
 
     private final List<Long> accountIds = new ArrayList<>();
@@ -112,19 +123,25 @@ class NotificationFlowIntegrationTest {
     void setUp() {
         Account studentAccount = accountRepository.save(new Account("60239992", "hash", AccountRole.STUDENT, false, false));
         accountIds.add(studentAccount.getId());
-        student = studentRepository.save(TestProfiles.student(studentAccount));
+        // 문자 아웃박스까지 확인하므로 모두 문자 수신에 동의한 상태로 둔다 (BE-83)
+        Student consentedStudent = TestProfiles.student(studentAccount);
+        consentedStudent.changeSmsConsent(true, LocalDateTime.now(clock));
+        student = studentRepository.save(consentedStudent);
         studentId = student.getAccountId();
         for (int i = 0; i < 3; i++) {
             Account account = accountRepository.save(
                     new Account(helperEmail(i), "hash", AccountRole.HELPER, false, false));
             accountIds.add(account.getId());
-            helperIds.add(helperRepository.save(TestProfiles.helper(account, "6025000" + i)).getAccountId());
+            Helper consentedHelper = TestProfiles.helper(account, "6025000" + i);
+            consentedHelper.changeSmsConsent(true, LocalDateTime.now(clock));
+            helperIds.add(helperRepository.save(consentedHelper).getAccountId());
         }
         tomorrowNoon = LocalDateTime.now(clock).plusDays(1).truncatedTo(ChronoUnit.DAYS).withHour(12);
     }
 
     @AfterEach
     void tearDown() {
+        smsConsentChangeRepository.deleteAll();
         notificationJobRepository.deleteAll();
         notificationRepository.deleteAll();
         mailOutboxRepository.deleteAll();
@@ -172,6 +189,29 @@ class NotificationFlowIntegrationTest {
 
     private List<NotificationType> typesOf(Long recipientId) {
         return notificationsOf(recipientId).stream().map(Notification::getType).toList();
+    }
+
+    @Test
+    void 문자수신거부한장애학생_메일만받고문자는동의한도우미에게만() {
+        // given — 장애학생이 마이페이지에서 문자 수신을 거부
+        accountService.updateSmsConsent(studentId, new MeSmsConsentUpdateRequestDto(false));
+        Long requestId = saveRequest(tomorrowNoon);
+
+        // when
+        Long matched = apply(0, requestId);
+
+        // then
+        await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
+            assertThat(mailsTo("60239992@mju.ac.kr")).containsExactly(MailType.MATCHED);
+            assertThat(smsFor(requestId)).isEmpty();
+            assertThat(smsFor(matched)).containsExactly(SmsType.MATCHED);
+        });
+        assertThat(smsConsentChangeRepository.findByAccountIdOrderByIdAsc(studentId))
+                .singleElement()
+                .satisfies(change -> {
+                    assertThat(change.isConsented()).isFalse();
+                    assertThat(change.getSource()).isEqualTo(SmsConsentSource.SELF);
+                });
     }
 
     @Test

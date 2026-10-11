@@ -2,6 +2,7 @@ package com.hankkiatti.domain.account.controller;
 
 import com.hankkiatti.domain.account.dto.request.MeContactUpdateRequestDto;
 import com.hankkiatti.domain.account.dto.request.MeSettingsUpdateRequestDto;
+import com.hankkiatti.domain.account.dto.request.MeSmsConsentUpdateRequestDto;
 import com.hankkiatti.domain.account.dto.response.MeResponseDto;
 import com.hankkiatti.domain.account.service.AccountService;
 import com.hankkiatti.global.response.ApiResponse;
@@ -37,6 +38,14 @@ public class MeController implements MeControllerDocs {
             @AuthenticationPrincipal AuthPrincipal principal,
             @Valid @RequestBody MeSettingsUpdateRequestDto request) {
         return ApiResponse.of(SuccessType.SUCCESS, accountService.updateSettings(principal.accountId(), request));
+    }
+
+    @Override
+    @PatchMapping("/sms-consent")
+    public ResponseEntity<ApiResult<MeResponseDto>> updateSmsConsent(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @Valid @RequestBody MeSmsConsentUpdateRequestDto request) {
+        return ApiResponse.of(SuccessType.SUCCESS, accountService.updateSmsConsent(principal.accountId(), request));
     }
 
     @Override

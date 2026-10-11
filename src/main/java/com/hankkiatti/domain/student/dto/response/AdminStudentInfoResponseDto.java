@@ -20,5 +20,6 @@ public record AdminStudentInfoResponseDto(
         @Schema(description = "접근성 모드 기본값 (큰 글씨 + 읽어 주기)") boolean accessibilityMode,
         @Schema(description = "등록일", example = "2026-09-20T10:00:00") LocalDateTime registeredAt,
         @Schema(description = "계정정보 메일 상태", example = "SENT") CredentialMailStatus credentialMailStatus,
-        @Schema(description = "특이사항 메모. 없으면 없다", example = "식판 운반과 메뉴 읽어 주기가 필요해요.") String specialNote
+        @Schema(description = "특이사항 메모. 없으면 없다", example = "식판 운반과 메뉴 읽어 주기가 필요해요.") String specialNote,
+        @Schema(description = "알림 문자 수신 동의 시각. 없으면 미동의 — 문자 대신 메일·앱 알림만", example = "2026-09-20T10:00:00") LocalDateTime smsConsentedAt
 ) {}
