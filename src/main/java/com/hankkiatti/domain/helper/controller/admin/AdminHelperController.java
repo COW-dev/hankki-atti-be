@@ -3,16 +3,20 @@ package com.hankkiatti.domain.helper.controller.admin;
 import com.hankkiatti.domain.account.entity.AccountStatus;
 import com.hankkiatti.domain.helper.dto.response.AdminHelperActivityResponseDto;
 import com.hankkiatti.domain.helper.dto.response.AdminHelperDetailResponseDto;
+import com.hankkiatti.domain.helper.dto.response.AdminHelperTemporaryPasswordResponseDto;
 import com.hankkiatti.domain.helper.dto.response.AdminHelpersResponseDto;
 import com.hankkiatti.domain.helper.service.AdminHelperService;
 import com.hankkiatti.global.response.ApiResponse;
 import com.hankkiatti.global.response.ApiResult;
 import com.hankkiatti.global.response.type.SuccessType;
+import com.hankkiatti.global.security.AuthPrincipal;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -44,5 +48,14 @@ public class AdminHelperController implements AdminHelperControllerDocs {
     @GetMapping("/{helperId}/activities")
     public ResponseEntity<ApiResult<List<AdminHelperActivityResponseDto>>> getActivities(@PathVariable Long helperId) {
         return ApiResponse.of(SuccessType.SUCCESS, adminHelperService.getActivities(helperId));
+    }
+
+    @Override
+    @PostMapping("/{helperId}/temporary-password")
+    public ResponseEntity<ApiResult<AdminHelperTemporaryPasswordResponseDto>> issueTemporaryPassword(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @PathVariable Long helperId) {
+        return ApiResponse.of(SuccessType.SUCCESS,
+                adminHelperService.issueTemporaryPassword(principal.accountId(), helperId));
     }
 }

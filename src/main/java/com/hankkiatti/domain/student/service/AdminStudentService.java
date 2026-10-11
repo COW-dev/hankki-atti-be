@@ -11,6 +11,7 @@ import com.hankkiatti.domain.application.repository.ApplicationRepository;
 import com.hankkiatti.domain.auth.exception.AuthErrorType;
 import com.hankkiatti.domain.auth.exception.AuthException;
 import com.hankkiatti.domain.auth.repository.PasswordResetTokenRepository;
+import com.hankkiatti.domain.auth.service.TemporaryPasswords;
 import com.hankkiatti.domain.common.PhoneNumbers;
 import com.hankkiatti.domain.helprequest.entity.HelpRequest;
 import com.hankkiatti.domain.helprequest.repository.HelpRequestRepository;
@@ -30,11 +31,8 @@ import com.hankkiatti.domain.student.exception.StudentErrorType;
 import com.hankkiatti.domain.student.exception.StudentException;
 import com.hankkiatti.domain.student.repository.StudentRepository;
 import com.hankkiatti.domain.student.repository.StudentRecentRequestProjection;
-import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -53,12 +51,6 @@ import org.springframework.util.StringUtils;
 public class AdminStudentService {
 
     private static final String CREDENTIAL_MAIL_SUBJECT = "[한끼아띠] 장애학생 계정정보 안내";
-    private static final int TEMPORARY_PASSWORD_LENGTH = 12;
-    private static final String LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-    private static final String DIGITS = "23456789";
-    private static final String SPECIALS = "!@#$%^&*";
-    private static final String PASSWORD_CHARS = LETTERS + DIGITS + SPECIALS;
-    private static final SecureRandom RANDOM = new SecureRandom();
 
     private final AdminRepository adminRepository;
     private final AccountRepository accountRepository;
@@ -158,7 +150,7 @@ public class AdminStudentService {
             throw new StudentException(StudentErrorType.DUPLICATE_STUDENT_NO);
         }
 
-        String temporaryPassword = generateTemporaryPassword();
+        String temporaryPassword = TemporaryPasswords.generate();
         Account account;
         Student student;
         try {
@@ -231,7 +223,7 @@ public class AdminStudentService {
     }
 
     private void issueCredentialMail(Account account, Student student) {
-        String temporaryPassword = generateTemporaryPassword();
+        String temporaryPassword = TemporaryPasswords.generate();
         account.issueTemporaryPassword(passwordEncoder.encode(temporaryPassword));
         student.markCredentialMailPending();
         passwordResetTokenRepository.invalidateAllByAccountId(account.getId(), LocalDateTime.now(clock));
@@ -340,25 +332,6 @@ public class AdminStudentService {
 
                 본인이 요청하지 않은 계정이거나 문의가 필요하면 명지대학교 장애학생지원센터로 연락해 주세요.
                 """.formatted(loginId, temporaryPassword);
-    }
-
-    private static String generateTemporaryPassword() {
-        List<Character> characters = new ArrayList<>();
-        characters.add(randomChar(LETTERS));
-        characters.add(randomChar(DIGITS));
-        characters.add(randomChar(SPECIALS));
-        while (characters.size() < TEMPORARY_PASSWORD_LENGTH) {
-            characters.add(randomChar(PASSWORD_CHARS));
-        }
-        Collections.shuffle(characters, RANDOM);
-
-        StringBuilder password = new StringBuilder(TEMPORARY_PASSWORD_LENGTH);
-        characters.forEach(password::append);
-        return password.toString();
-    }
-
-    private static char randomChar(String candidates) {
-        return candidates.charAt(RANDOM.nextInt(candidates.length()));
     }
 
     private static String trimToNull(String value) {

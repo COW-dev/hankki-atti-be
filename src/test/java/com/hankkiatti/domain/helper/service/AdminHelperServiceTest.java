@@ -3,21 +3,26 @@ package com.hankkiatti.domain.helper.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import com.hankkiatti.domain.account.entity.AccountRole;
+import com.hankkiatti.domain.account.entity.Account;
 import com.hankkiatti.domain.account.entity.AccountStatus;
+import com.hankkiatti.domain.account.repository.AccountRepository;
 import com.hankkiatti.domain.application.entity.Application;
 import com.hankkiatti.domain.application.entity.ApplicationAfterAction;
 import com.hankkiatti.domain.application.entity.ApplicationStatus;
 import com.hankkiatti.domain.application.entity.CancelReason;
 import com.hankkiatti.domain.application.repository.ApplicationRepository;
 import com.hankkiatti.domain.application.repository.HelperApplicationCount;
+import com.hankkiatti.domain.auth.repository.PasswordResetTokenRepository;
 import com.hankkiatti.domain.helper.dto.response.AdminHelperActivityResponseDto;
 import com.hankkiatti.domain.helper.dto.response.AdminHelperDetailResponseDto;
+import com.hankkiatti.domain.helper.dto.response.AdminHelperTemporaryPasswordResponseDto;
 import com.hankkiatti.domain.helper.dto.response.AdminHelpersResponseDto;
 import com.hankkiatti.domain.helper.entity.Helper;
 import com.hankkiatti.domain.helper.exception.HelperErrorType;
@@ -25,22 +30,28 @@ import com.hankkiatti.domain.helper.exception.HelperException;
 import com.hankkiatti.domain.helper.repository.HelperRepository;
 import com.hankkiatti.domain.helprequest.entity.HelpRequest;
 import com.hankkiatti.domain.helprequest.entity.HelpRequestStatus;
+import com.hankkiatti.domain.mail.entity.MailType;
+import com.hankkiatti.domain.mail.service.MailOutboxService;
 import com.hankkiatti.domain.student.entity.Student;
 import com.hankkiatti.support.TestAccounts;
 import com.hankkiatti.support.TestHelpRequests;
 import com.hankkiatti.support.TestProfiles;
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
@@ -54,7 +65,21 @@ class AdminHelperServiceTest {
     private HelperRepository helperRepository;
 
     @Mock
+    private AccountRepository accountRepository;
+
+    @Mock
     private ApplicationRepository applicationRepository;
+
+    @Mock
+    private PasswordResetTokenRepository passwordResetTokenRepository;
+
+    @Mock
+    private MailOutboxService mailOutboxService;
+
+    @Mock
+    private PasswordEncoder passwordEncoder;
+
+    private final Clock clock = Clock.fixed(NOON.atZone(ZoneId.of("Asia/Seoul")).toInstant(), ZoneId.of("Asia/Seoul"));
 
     private AdminHelperService service;
 
@@ -64,7 +89,8 @@ class AdminHelperServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new AdminHelperService(helperRepository, applicationRepository);
+        service = new AdminHelperService(helperRepository, accountRepository, applicationRepository,
+                passwordResetTokenRepository, mailOutboxService, passwordEncoder, clock);
         student = TestHelpRequests.student("60231234");
         ReflectionTestUtils.setField(student, "accountId", 1L);
         ReflectionTestUtils.setField(student, "name", "김민지");
@@ -285,5 +311,61 @@ class AdminHelperServiceTest {
         assertThatThrownBy(() -> service.getActivities(HELPER_ID))
                 .isInstanceOf(HelperException.class)
                 .extracting("errorCode").isEqualTo(HelperErrorType.NOT_FOUND);
+    }
+
+    @Test
+    void issueTemporaryPassword_활성도우미_변경필요로바꾸고로그인을끊고메일을적재한다() {
+        // given
+        Account account = helper.getAccount();
+        int tokenVersion = account.getTokenVersion();
+        given(accountRepository.findByIdForUpdate(HELPER_ID)).willReturn(Optional.of(account));
+        given(helperRepository.findById(HELPER_ID)).willReturn(Optional.of(helper));
+        given(passwordEncoder.encode(anyString())).willReturn("encoded-temporary");
+
+        // when
+        AdminHelperTemporaryPasswordResponseDto result = service.issueTemporaryPassword(100L, HELPER_ID);
+
+        // then
+        ArgumentCaptor<String> rawPassword = ArgumentCaptor.forClass(String.class);
+        verify(passwordEncoder).encode(rawPassword.capture());
+        assertThat(account.getPasswordHash()).isEqualTo("encoded-temporary");
+        assertThat(account.isMustChangePassword()).isTrue();
+        assertThat(account.getTokenVersion()).isEqualTo(tokenVersion + 1);
+        verify(passwordResetTokenRepository).invalidateAllByAccountId(HELPER_ID, NOON);
+
+        ArgumentCaptor<String> body = ArgumentCaptor.forClass(String.class);
+        verify(mailOutboxService).enqueue(eq(MailType.TEMPORARY_PASSWORD), eq(helper.getEmail()),
+                eq(AdminHelperService.TEMPORARY_PASSWORD_SUBJECT), body.capture(), eq(HELPER_ID));
+        assertThat(body.getValue()).contains(account.getLoginId(), rawPassword.getValue());
+        assertThat(result.helperId()).isEqualTo(HELPER_ID);
+        assertThat(result.email()).isEqualTo(helper.getEmail());
+    }
+
+    @Test
+    void issueTemporaryPassword_비활성도우미_INACTIVE이고비밀번호를바꾸지않음() {
+        // given
+        Account account = helper.getAccount();
+        account.deactivate(NOON.minusDays(1));
+        given(accountRepository.findByIdForUpdate(HELPER_ID)).willReturn(Optional.of(account));
+
+        // when & then
+        assertThatThrownBy(() -> service.issueTemporaryPassword(100L, HELPER_ID))
+                .isInstanceOf(HelperException.class)
+                .extracting("errorCode").isEqualTo(HelperErrorType.INACTIVE);
+        assertThat(account.isMustChangePassword()).isFalse();
+        verify(mailOutboxService, never()).enqueue(any(), anyString(), anyString(), anyString(), any());
+    }
+
+    @Test
+    void issueTemporaryPassword_도우미가아닌계정_NOT_FOUND() {
+        // given
+        Account studentAccount = TestAccounts.withId(HELPER_ID, AccountRole.STUDENT, "hash", false);
+        given(accountRepository.findByIdForUpdate(HELPER_ID)).willReturn(Optional.of(studentAccount));
+
+        // when & then
+        assertThatThrownBy(() -> service.issueTemporaryPassword(100L, HELPER_ID))
+                .isInstanceOf(HelperException.class)
+                .extracting("errorCode").isEqualTo(HelperErrorType.NOT_FOUND);
+        verify(passwordEncoder, never()).encode(anyString());
     }
 }

@@ -1,6 +1,7 @@
 package com.hankkiatti.domain.helper.integration;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -23,6 +24,9 @@ import com.hankkiatti.domain.helprequest.entity.HelpRequest;
 import com.hankkiatti.domain.helprequest.entity.HelpType;
 import com.hankkiatti.domain.helprequest.repository.HelpRequestRepository;
 import com.hankkiatti.domain.helprequest.service.HelpRequestService;
+import com.hankkiatti.domain.mail.entity.MailOutbox;
+import com.hankkiatti.domain.mail.entity.MailType;
+import com.hankkiatti.domain.mail.repository.MailOutboxRepository;
 import com.hankkiatti.domain.student.entity.DisabilityType;
 import com.hankkiatti.domain.student.entity.Student;
 import com.hankkiatti.domain.student.repository.StudentRepository;
@@ -34,6 +38,8 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -85,6 +91,9 @@ class AdminHelperIntegrationTest {
 
     @Autowired
     private ApplicationRepository applicationRepository;
+
+    @Autowired
+    private MailOutboxRepository mailOutboxRepository;
 
     @Autowired
     private PasswordEncoder passwordEncoder;
@@ -238,5 +247,60 @@ class AdminHelperIntegrationTest {
                         .header(HttpHeaders.AUTHORIZATION, adminToken("center01")))
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(jsonPath("$.code").value("HELPER_INVALID_PAGE"));
+    }
+
+    private int login(String loginId, String password) throws Exception {
+        return mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"loginId\":\"" + loginId + "\",\"password\":\"" + password + "\"}"))
+                .andReturn().getResponse().getStatus();
+    }
+
+    @Test
+    void 임시비밀번호_제한권한도발송_옛비밀번호와기존로그인은끊기고_임시비밀번호로로그인하면변경필요() throws Exception {
+        // given
+        String email = "admin-helper0@mju.ac.kr";
+        String oldToken = loginBearer("/api/auth/login", email);
+
+        // when
+        mockMvc.perform(post("/api/admin/helpers/" + helperIds.get(0) + "/temporary-password")
+                        .header(HttpHeaders.AUTHORIZATION, adminToken("atti01")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.helperId").value(helperIds.get(0)))
+                .andExpect(jsonPath("$.data.email").value(email));
+
+        // then — 메일 1건(가입 이메일), 본문의 임시 비밀번호로만 로그인되고 변경이 필요하다
+        List<MailOutbox> mails = mailOutboxRepository.findAll().stream()
+                .filter(mail -> mail.getMailType() == MailType.TEMPORARY_PASSWORD)
+                .filter(mail -> helperIds.get(0).equals(mail.getReferenceId()))
+                .toList();
+        assertThat(mails).singleElement().extracting(MailOutbox::getRecipient).isEqualTo(email);
+        Matcher matcher = Pattern.compile("임시 비밀번호: (\\S+)").matcher(mails.get(0).getBody());
+        assertThat(matcher.find()).isTrue();
+        String temporaryPassword = matcher.group(1);
+
+        assertThat(login(email, PASSWORD)).isEqualTo(401);
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"loginId\":\"" + email + "\",\"password\":\"" + temporaryPassword + "\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.mustChangePassword").value(true));
+        mockMvc.perform(get("/api/me").header(HttpHeaders.AUTHORIZATION, oldToken))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void 임시비밀번호_비활성도우미409_도우미토큰403() throws Exception {
+        // given
+        helperRepository.findById(helperIds.get(1)).orElseThrow().getAccount().deactivate(LocalDateTime.now(clock));
+
+        // when & then
+        mockMvc.perform(post("/api/admin/helpers/" + helperIds.get(1) + "/temporary-password")
+                        .header(HttpHeaders.AUTHORIZATION, adminToken("center01")))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("HELPER_INACTIVE"));
+        mockMvc.perform(post("/api/admin/helpers/" + helperIds.get(0) + "/temporary-password")
+                        .header(HttpHeaders.AUTHORIZATION, loginBearer("/api/auth/login", "admin-helper0@mju.ac.kr")))
+                .andExpect(status().isForbidden());
     }
 }
