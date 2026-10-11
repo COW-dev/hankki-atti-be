@@ -108,7 +108,7 @@ public class AdminHelperService {
         List<Application> applications = applicationRepository.findByHelperAccountId(helperId);
         return new AdminHelperDetailResponseDto(helper.getAccountId(), helper.getName(), helper.getStudentNo(),
                 helper.getAccount().getStatus(), helper.isAttiMember(), helper.getEmail(), helper.getPhone(),
-                helper.getKakaoId(), helper.getCreatedAt(), summarize(applications));
+                helper.getKakaoId(), helper.getCreatedAt(), helper.getSmsConsentedAt(), summarize(applications));
     }
 
     /**

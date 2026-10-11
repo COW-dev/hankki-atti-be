@@ -2,13 +2,18 @@ package com.hankkiatti.domain.account.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import com.hankkiatti.domain.account.dto.request.MeContactUpdateRequestDto;
 import com.hankkiatti.domain.account.dto.request.MeSettingsUpdateRequestDto;
+import com.hankkiatti.domain.account.dto.request.MeSmsConsentUpdateRequestDto;
 import com.hankkiatti.domain.account.dto.response.MeResponseDto;
 import com.hankkiatti.domain.account.entity.Account;
 import com.hankkiatti.domain.account.entity.AccountRole;
@@ -20,19 +25,28 @@ import com.hankkiatti.domain.auth.exception.AuthErrorType;
 import com.hankkiatti.domain.auth.exception.AuthException;
 import com.hankkiatti.domain.helper.entity.Helper;
 import com.hankkiatti.domain.helper.repository.HelperRepository;
+import com.hankkiatti.domain.sms.entity.SmsConsentSource;
+import com.hankkiatti.domain.sms.service.SmsConsentHistory;
+import com.hankkiatti.domain.student.entity.Student;
 import com.hankkiatti.domain.student.repository.StudentRepository;
 import com.hankkiatti.support.TestAccounts;
 import com.hankkiatti.support.TestProfiles;
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Optional;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
 class AccountServiceTest {
+
+    private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
+    private static final LocalDateTime NOW = LocalDateTime.of(2026, 10, 11, 10, 0);
 
     @Mock
     private AccountRepository accountRepository;
@@ -46,8 +60,16 @@ class AccountServiceTest {
     @Mock
     private ApplicationRepository applicationRepository;
 
-    @InjectMocks
+    @Mock
+    private SmsConsentHistory smsConsentHistory;
+
     private AccountService accountService;
+
+    @BeforeEach
+    void setUp() {
+        accountService = new AccountService(accountRepository, studentRepository, helperRepository,
+                applicationRepository, smsConsentHistory, Clock.fixed(NOW.atZone(SEOUL).toInstant(), SEOUL));
+    }
 
     private Account givenStudent(Long id) {
         Account account = TestAccounts.withId(id, AccountRole.STUDENT, "hash", false);
@@ -187,5 +209,47 @@ class AccountServiceTest {
         assertThatThrownBy(() -> accountService.updateSettings(99L, new MeSettingsUpdateRequestDto(true)))
                 .isInstanceOf(AccountException.class)
                 .extracting("errorCode").isEqualTo(AccountErrorType.NOT_FOUND);
+    }
+
+    @Test
+    void updateSmsConsent_장애학생본인동의_시각을남기고이력은SELF() {
+        // given
+        givenStudent(1L);
+
+        // when
+        MeResponseDto result = accountService.updateSmsConsent(1L, new MeSmsConsentUpdateRequestDto(true));
+
+        // then
+        assertThat(result.smsConsent()).isTrue();
+        assertThat(result.smsConsentedAt()).isEqualTo(NOW);
+        verify(smsConsentHistory).record(any(Account.class), eq(true), eq(SmsConsentSource.SELF), isNull());
+    }
+
+    @Test
+    void updateSmsConsent_도우미수신거부_시각을지우고이력을남긴다() {
+        // given
+        Helper helper = givenHelper(2L, null);
+        helper.changeSmsConsent(true, NOW.minusDays(3));
+
+        // when
+        MeResponseDto result = accountService.updateSmsConsent(2L, new MeSmsConsentUpdateRequestDto(false));
+
+        // then
+        assertThat(result.smsConsent()).isFalse();
+        assertThat(helper.getSmsConsentedAt()).isNull();
+        verify(smsConsentHistory).record(any(Account.class), eq(false), eq(SmsConsentSource.SELF), isNull());
+    }
+
+    @Test
+    void updateSmsConsent_이미같은상태_이력을남기지않는다() {
+        // given
+        givenStudent(1L);
+
+        // when
+        MeResponseDto result = accountService.updateSmsConsent(1L, new MeSmsConsentUpdateRequestDto(false));
+
+        // then
+        assertThat(result.smsConsent()).isFalse();
+        verify(smsConsentHistory, never()).record(any(), anyBoolean(), any(), any());
     }
 }

@@ -155,12 +155,13 @@ public class NotificationDispatcher {
                 NotificationTargetType.NOTICE, noticeId);
     }
 
-    // 장애학생 알림 → 신청. 급한 4종이면 학교 이메일·등록 전화번호로 메일·문자도
+    // 장애학생 알림 → 신청. 급한 4종이면 학교 이메일·등록 전화번호로 메일·문자도 (문자는 수신 동의했을 때만)
     private void toStudent(HelpRequest request, NotificationType type, String message) {
         Student student = request.getStudent();
         notificationService.notify(student.getAccountId(), type, message,
                 NotificationTargetType.HELP_REQUEST, request.getId());
-        outboxSender.send(type, new Recipient(student.getSchoolEmail(), student.getPhone()), message,
+        String phone = student.isSmsConsented() ? student.getPhone() : null;
+        outboxSender.send(type, new Recipient(student.getSchoolEmail(), phone), message,
                 request.getStartAt(), null, false, request.getId());
     }
 
@@ -168,13 +169,14 @@ public class NotificationDispatcher {
         toHelper(application, type, message, null, false);
     }
 
-    // 도우미 알림 → 그 도우미의 지원. 급한 4종이면 가입 이메일·전화번호로 메일·문자도
+    // 도우미 알림 → 그 도우미의 지원. 급한 4종이면 가입 이메일·전화번호로 메일·문자도 (문자는 수신 동의했을 때만)
     private void toHelper(Application application, NotificationType type, String message,
                           LocalDateTime deadline, boolean reminder) {
         Helper helper = application.getHelper();
         notificationService.notify(helper.getAccountId(), type, message,
                 NotificationTargetType.APPLICATION, application.getId());
-        outboxSender.send(type, new Recipient(helper.getEmail(), helper.getPhone()), message,
+        String phone = helper.isSmsConsented() ? helper.getPhone() : null;
+        outboxSender.send(type, new Recipient(helper.getEmail(), phone), message,
                 application.getHelpRequest().getStartAt(), deadline, reminder, application.getId());
     }
 

@@ -96,6 +96,8 @@ class NotificationDispatcherTest {
         ReflectionTestUtils.setField(helper, "accountId", HELPER_ID);
         application = new Application(request, helper, NOON.minusDays(1));
         ReflectionTestUtils.setField(application, "id", APPLICATION_ID);
+        student.changeSmsConsent(true, NOW);
+        helper.changeSmsConsent(true, NOW);
     }
 
     private NotificationJob job(NotificationJobType type, Long targetId, String detail) {
@@ -223,6 +225,24 @@ class NotificationDispatcherTest {
 
         // then
         verifyToHelper(NotificationType.STUDENT_CANCELED, "10월 12일(월) 12:00 신청이 장애학생 사정으로 취소됐어요.");
+    }
+
+    @Test
+    void process_문자수신미동의_전화번호없이넘겨문자는빠진다() {
+        // given
+        givenApplication();
+        student.changeSmsConsent(false, NOW);
+
+        // when
+        process(NotificationJobType.HELPER_CONFIRMED, APPLICATION_ID, HelperConfirmedEvent.Kind.DIRECT_MATCH.name());
+
+        // then — 장애학생은 메일만, 동의한 도우미는 그대로
+        verify(outboxSender).send(NotificationType.REQUEST_MATCHED,
+                new Recipient(student.getSchoolEmail(), null),
+                "10월 12일(월) 12:00 식사 도우미가 매칭됐어요.", NOON, null, false, REQUEST_ID);
+        verify(outboxSender).send(NotificationType.APPLICATION_MATCHED,
+                new Recipient(helper.getEmail(), helper.getPhone()),
+                "10월 12일(월) 12:00 식사 도우미로 매칭됐어요.", NOON, null, false, APPLICATION_ID);
     }
 
     @Test

@@ -2,6 +2,7 @@ package com.hankkiatti.domain.account.dto.response;
 
 import com.hankkiatti.domain.account.entity.AccountRole;
 import io.swagger.v3.oas.annotations.media.Schema;
+import java.time.LocalDateTime;
 
 @Schema(description = "로그인한 사용자의 내 정보 (마이페이지)")
 public record MeResponseDto(
@@ -13,5 +14,7 @@ public record MeResponseDto(
         @Schema(description = "학번", example = "60231234") String studentNo,
         @Schema(description = "휴대전화 번호", example = "010-1234-5678") String phone,
         @Schema(description = "카카오톡 ID", example = "hankki_kakao") String kakaoId,
+        @Schema(description = "알림 문자 수신 동의 여부. false면 문자 대신 메일·앱 알림만 받는다") boolean smsConsent,
+        @Schema(description = "알림 문자 수신 동의 시각. 미동의면 없다", example = "2026-10-11T10:00:00") LocalDateTime smsConsentedAt,
         @Schema(description = "도우미만 있는 정보. 장애학생은 null") MeHelperResponseDto helper
 ) {}

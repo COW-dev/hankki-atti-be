@@ -3,7 +3,10 @@ package com.hankkiatti.domain.helper.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
@@ -16,6 +19,8 @@ import com.hankkiatti.domain.helper.entity.Helper;
 import com.hankkiatti.domain.helper.exception.HelperErrorType;
 import com.hankkiatti.domain.helper.exception.HelperException;
 import com.hankkiatti.domain.helper.repository.HelperRepository;
+import com.hankkiatti.domain.sms.entity.SmsConsentSource;
+import com.hankkiatti.domain.sms.service.SmsConsentHistory;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -44,17 +49,26 @@ class HelperSignupServiceTest {
     @Mock
     private PasswordEncoder passwordEncoder;
 
+    @Mock
+    private SmsConsentHistory smsConsentHistory;
+
     private HelperSignupService helperSignupService;
 
     @BeforeEach
     void setUp() {
         Clock clock = Clock.fixed(NOW.atZone(SEOUL).toInstant(), SEOUL);
-        helperSignupService = new HelperSignupService(accountRepository, helperRepository, passwordEncoder, clock);
+        helperSignupService = new HelperSignupService(accountRepository, helperRepository, passwordEncoder,
+                smsConsentHistory, clock);
     }
 
     private HelperSignupRequestDto request(String email, String studentNo, String phone, Boolean attiMember) {
+        return request(email, studentNo, phone, attiMember, null);
+    }
+
+    private HelperSignupRequestDto request(String email, String studentNo, String phone, Boolean attiMember,
+                                           Boolean smsConsent) {
         return new HelperSignupRequestDto(" 이도움 ", studentNo, email, phone, "hankki_helper", "hankki!2026",
-                attiMember, true);
+                attiMember, true, smsConsent);
     }
 
     private void givenSavedAccountGetsId(long id) {
@@ -63,6 +77,9 @@ class HelperSignupServiceTest {
             ReflectionTestUtils.setField(account, "id", id);
             return account;
         });
+        // 프로필 저장까지 가지 않는 경우(계정 저장 충돌)도 있어 lenient
+        lenient().when(helperRepository.saveAndFlush(any(Helper.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
     }
 
     @Test
@@ -149,5 +166,37 @@ class HelperSignupServiceTest {
                 request("helper@mju.ac.kr", "60230001", "010-1234-5678", false)))
                 .isInstanceOf(HelperException.class)
                 .extracting("errorCode").isEqualTo(HelperErrorType.SIGNUP_CONFLICT);
+    }
+
+    @Test
+    void signup_문자수신동의_동의시각을남기고가입이력을SIGNUP으로() {
+        // given
+        given(passwordEncoder.encode("hankki!2026")).willReturn("hash");
+        givenSavedAccountGetsId(7L);
+
+        // when
+        helperSignupService.signup(request("sms@mju.ac.kr", "60230009", "010-1234-5678", null, true));
+
+        // then
+        ArgumentCaptor<Helper> helper = ArgumentCaptor.forClass(Helper.class);
+        verify(helperRepository).saveAndFlush(helper.capture());
+        assertThat(helper.getValue().getSmsConsentedAt()).isEqualTo(NOW);
+        verify(smsConsentHistory).record(any(Account.class), eq(true), eq(SmsConsentSource.SIGNUP), isNull());
+    }
+
+    @Test
+    void signup_문자수신동의안보냄_미동의로가입하고첫상태를이력에남긴다() {
+        // given
+        given(passwordEncoder.encode("hankki!2026")).willReturn("hash");
+        givenSavedAccountGetsId(7L);
+
+        // when
+        helperSignupService.signup(request("nosms@mju.ac.kr", "60230010", "010-1234-5678", null));
+
+        // then
+        ArgumentCaptor<Helper> helper = ArgumentCaptor.forClass(Helper.class);
+        verify(helperRepository).saveAndFlush(helper.capture());
+        assertThat(helper.getValue().isSmsConsented()).isFalse();
+        verify(smsConsentHistory).record(any(Account.class), eq(false), eq(SmsConsentSource.SIGNUP), isNull());
     }
 }

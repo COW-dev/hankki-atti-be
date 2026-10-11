@@ -30,6 +30,8 @@ import com.hankkiatti.domain.helprequest.entity.HelpType;
 import com.hankkiatti.domain.helprequest.repository.HelpRequestRepository;
 import com.hankkiatti.domain.mail.entity.MailType;
 import com.hankkiatti.domain.mail.service.MailOutboxService;
+import com.hankkiatti.domain.sms.entity.SmsConsentSource;
+import com.hankkiatti.domain.sms.service.SmsConsentHistory;
 import com.hankkiatti.domain.student.dto.request.AdminStudentCreateRequestDto;
 import com.hankkiatti.domain.student.dto.request.AdminStudentUpdateRequestDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentAccountStatusResponseDto;
@@ -42,8 +44,8 @@ import com.hankkiatti.domain.student.entity.DisabilityType;
 import com.hankkiatti.domain.student.entity.Student;
 import com.hankkiatti.domain.student.exception.StudentErrorType;
 import com.hankkiatti.domain.student.exception.StudentException;
-import com.hankkiatti.domain.student.repository.StudentRepository;
 import com.hankkiatti.domain.student.repository.StudentRecentRequestProjection;
+import com.hankkiatti.domain.student.repository.StudentRepository;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -58,10 +60,10 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith({MockitoExtension.class, OutputCaptureExtension.class})
@@ -94,6 +96,9 @@ class AdminStudentServiceTest {
     @Mock
     private PasswordEncoder passwordEncoder;
 
+    @Mock
+    private SmsConsentHistory smsConsentHistory;
+
     private Clock clock;
     private AdminStudentService adminStudentService;
 
@@ -102,10 +107,15 @@ class AdminStudentServiceTest {
         clock = Clock.fixed(Instant.parse("2026-10-05T01:00:00Z"), ZoneId.of("Asia/Seoul"));
         adminStudentService = new AdminStudentService(
                 adminRepository, accountRepository, studentRepository, helpRequestRepository,
-                applicationRepository, passwordResetTokenRepository, mailOutboxService, passwordEncoder, clock);
+                applicationRepository, passwordResetTokenRepository, mailOutboxService, passwordEncoder,
+                smsConsentHistory, clock);
     }
 
     private AdminStudentCreateRequestDto request() {
+        return request(null);
+    }
+
+    private AdminStudentCreateRequestDto request(Boolean smsConsent) {
         return new AdminStudentCreateRequestDto(
                 " 김한끼 ",
                 "60261234",
@@ -113,7 +123,8 @@ class AdminStudentServiceTest {
                 "hankki_student",
                 "Student@MJU.ac.kr",
                 DisabilityType.PHYSICAL,
-                " 식판 이동 도움 ");
+                " 식판 이동 도움 ",
+                smsConsent);
     }
 
     private Admin admin(AdminGrade grade) {
@@ -263,7 +274,8 @@ class AdminStudentServiceTest {
                 " revised_kakao ",
                 "Revised@MJU.ac.kr ",
                 DisabilityType.HEARING,
-                " 보청기 사용 ");
+                " 보청기 사용 ",
+                null);
         given(studentRepository.findByIdForUpdate(10L)).willReturn(Optional.of(student));
         // when
         AdminStudentInfoResponseDto result = adminStudentService.update(ADMIN_ID, 10L, request);
@@ -284,7 +296,7 @@ class AdminStudentServiceTest {
         // given
         given(adminRepository.findById(ADMIN_ID)).willReturn(Optional.of(admin(AdminGrade.LIMITED)));
         AdminStudentUpdateRequestDto request = new AdminStudentUpdateRequestDto(
-                "박수정", "010-9876-5432", "revised", "revised@mju.ac.kr", DisabilityType.HEARING, null);
+                "박수정", "010-9876-5432", "revised", "revised@mju.ac.kr", DisabilityType.HEARING, null, null);
 
         // when & then
         assertThatThrownBy(() -> adminStudentService.update(ADMIN_ID, 10L, request))
@@ -532,5 +544,78 @@ class AdminStudentServiceTest {
                 .isInstanceOf(StudentException.class)
                 .extracting("errorCode").isEqualTo(StudentErrorType.CREDENTIAL_MAIL_NOT_FAILED);
         verify(mailOutboxService, never()).enqueue(any(), anyString(), anyString(), anyString(), any());
+    }
+
+    @Test
+    void create_문자수신동의체크_동의시각과관리자이력을남긴다() {
+        // given
+        givenFullAdmin();
+        given(passwordEncoder.encode(anyString())).willReturn("encoded");
+        givenSavedAccountGetsId(10L);
+
+        // when
+        adminStudentService.create(ADMIN_ID, request(true));
+
+        // then
+        ArgumentCaptor<Student> student = ArgumentCaptor.forClass(Student.class);
+        verify(studentRepository).saveAndFlush(student.capture());
+        assertThat(student.getValue().getSmsConsentedAt()).isEqualTo(LocalDateTime.now(clock));
+        verify(smsConsentHistory).record(any(Account.class), eq(true), eq(SmsConsentSource.ADMIN), any(Admin.class));
+    }
+
+    @Test
+    void create_문자수신동의없음_미동의로등록하고첫상태를이력에남긴다() {
+        // given
+        givenFullAdmin();
+        given(passwordEncoder.encode(anyString())).willReturn("encoded");
+        givenSavedAccountGetsId(10L);
+
+        // when
+        adminStudentService.create(ADMIN_ID, request());
+
+        // then
+        ArgumentCaptor<Student> student = ArgumentCaptor.forClass(Student.class);
+        verify(studentRepository).saveAndFlush(student.capture());
+        assertThat(student.getValue().isSmsConsented()).isFalse();
+        verify(smsConsentHistory).record(any(Account.class), eq(false), eq(SmsConsentSource.ADMIN), any(Admin.class));
+    }
+
+    @Test
+    void update_문자수신동의변경_바뀐경우만이력을남기고안보내면그대로() {
+        // given
+        givenFullAdmin();
+        Student student = student(studentAccount(10L));
+        given(studentRepository.findByIdForUpdate(10L)).willReturn(Optional.of(student));
+
+        // when — 동의 → 같은 값 다시 → 안 보냄
+        AdminStudentInfoResponseDto consented = adminStudentService.update(ADMIN_ID, 10L, update(true));
+        adminStudentService.update(ADMIN_ID, 10L, update(true));
+        adminStudentService.update(ADMIN_ID, 10L, update(null));
+
+        // then
+        assertThat(consented.smsConsentedAt()).isEqualTo(LocalDateTime.now(clock));
+        assertThat(student.isSmsConsented()).isTrue();
+        verify(smsConsentHistory).record(any(Account.class), eq(true), eq(SmsConsentSource.ADMIN), any(Admin.class));
+    }
+
+    @Test
+    void update_문자수신철회_시각을지우고이력을남긴다() {
+        // given
+        givenFullAdmin();
+        Student student = student(studentAccount(10L));
+        student.changeSmsConsent(true, LocalDateTime.now(clock).minusDays(1));
+        given(studentRepository.findByIdForUpdate(10L)).willReturn(Optional.of(student));
+
+        // when
+        adminStudentService.update(ADMIN_ID, 10L, update(false));
+
+        // then
+        assertThat(student.getSmsConsentedAt()).isNull();
+        verify(smsConsentHistory).record(any(Account.class), eq(false), eq(SmsConsentSource.ADMIN), any(Admin.class));
+    }
+
+    private static AdminStudentUpdateRequestDto update(Boolean smsConsent) {
+        return new AdminStudentUpdateRequestDto("박수정", "010-9876-5432", "revised", "revised@mju.ac.kr",
+                DisabilityType.HEARING, null, smsConsent);
     }
 }

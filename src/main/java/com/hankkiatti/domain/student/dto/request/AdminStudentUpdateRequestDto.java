@@ -41,5 +41,8 @@ public record AdminStudentUpdateRequestDto(
 
         @Size(max = 1000)
         @Schema(description = "특이사항", example = "식판 이동 도움이 필요합니다.")
-        String specialNote
+        String specialNote,
+
+        @Schema(description = "알림 문자 수신 동의 (선택). 보내지 않으면 지금 상태 그대로 — 장애학생에게 동의를 받았거나 철회 요청을 받았을 때 보낸다", example = "true")
+        Boolean smsConsent
 ) {}
