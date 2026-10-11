@@ -213,6 +213,21 @@ public interface ApplicationRepository extends JpaRepository<Application, Long> 
     List<Application> findWithHelperByHelpRequestIdIn(@Param("helpRequestIds") Collection<Long> helpRequestIds);
 
     /**
+     * 도우미의 진행 중 지원(매칭 완료·승격 응답 대기·예비) 중 식사가 아직 시작 안 한 것의 ID, 식사 순 (도우미 비활성화 해제 대상).
+     */
+    default List<Long> findActiveIdsBeforeMeal(Long helperId, LocalDateTime now) {
+        return findIdsByHelperAndStatusInAndMealAfter(helperId, ApplicationStatus.ACTIVE, now);
+    }
+
+    @Query("""
+            select a.id from Application a
+            where a.helper.accountId = :helperId and a.status in :statuses and a.helpRequest.startAt > :now
+            order by a.helpRequest.startAt, a.id""")
+    List<Long> findIdsByHelperAndStatusInAndMealAfter(@Param("helperId") Long helperId,
+                                                      @Param("statuses") Collection<ApplicationStatus> statuses,
+                                                      @Param("now") LocalDateTime now);
+
+    /**
      * 도우미의 지원 전부 (관리자 도우미 상세 요약 숫자).
      */
     List<Application> findByHelperAccountId(Long helperId);
