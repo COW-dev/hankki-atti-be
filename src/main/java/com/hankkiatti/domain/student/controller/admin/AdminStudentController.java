@@ -85,6 +85,15 @@ public class AdminStudentController implements AdminStudentControllerDocs {
     }
 
     @Override
+    @PatchMapping("/{studentAccountId}/activate")
+    public ResponseEntity<ApiResult<AdminStudentAccountStatusResponseDto>> activate(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @PathVariable Long studentAccountId) {
+        return ApiResponse.of(SuccessType.SUCCESS,
+                adminStudentService.activate(principal.accountId(), studentAccountId));
+    }
+
+    @Override
     @PostMapping
     public ResponseEntity<ApiResult<AdminStudentCreateResponseDto>> create(
             @AuthenticationPrincipal AuthPrincipal principal,

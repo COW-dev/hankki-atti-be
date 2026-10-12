@@ -77,6 +77,18 @@ public interface AdminStudentControllerDocs {
             @Parameter(hidden = true) AuthPrincipal principal,
             @Parameter(description = "학생 계정 ID") Long studentAccountId);
 
+    @Operation(summary = "장애학생 계정 재활성화", description = """
+            전체 권한 관리자가 비활성화된 장애학생 계정을 다시 활성화합니다.
+            비활성화할 때 취소된 신청과 지원은 복원하지 않습니다.
+            """)
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "재활성화 성공")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "전체 권한 관리자만 사용 가능")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "장애학생 없음")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "이미 활성화된 계정")
+    ResponseEntity<ApiResult<AdminStudentAccountStatusResponseDto>> activate(
+            @Parameter(hidden = true) AuthPrincipal principal,
+            @Parameter(description = "학생 계정 ID") Long studentAccountId);
+
     @Operation(summary = "장애학생 등록", description = "전체 권한 관리자가 장애학생 계정을 생성하고 학교 이메일로 계정정보를 발송합니다.")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "등록 성공")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "요청값 오류")

@@ -171,6 +171,18 @@ public class AdminStudentService {
     }
 
     @Transactional
+    public AdminStudentAccountStatusResponseDto activate(Long adminAccountId, Long studentAccountId) {
+        requireFullAdmin(adminAccountId);
+        Account account = findStudentAccountForUpdate(studentAccountId);
+        findStudentForUpdate(studentAccountId);
+
+        account.activate();
+        log.info("장애학생 계정 재활성화: accountId={}", studentAccountId);
+        return new AdminStudentAccountStatusResponseDto(
+                account.getId(), account.getStatus(), account.getDeactivatedAt());
+    }
+
+    @Transactional
     public AdminStudentCreateResponseDto create(Long adminAccountId, AdminStudentCreateRequestDto request) {
         Admin admin = requireFullAdmin(adminAccountId);
 
