@@ -426,14 +426,14 @@ void apply_이미매칭된신청_예비번호부여() {
 
 ## 배포 (CD)
 
-main에 병합되고 CI 검사(`test`, `secret-scan`, `agent-config`)가 모두 통과하면 Docker 이미지를 Docker Hub에 push한다.
+main에 병합되고 CI 검사(`test`, `secret-scan`, `agent-config`)가 모두 통과하면 Docker 이미지를 GitHub Container Registry(GHCR)에 push한다. 서버 배포는 인프라 쪽 Argo CD가 맡는다.
 
 | 항목 | 내용 |
 |---|---|
-| 이미지 | `mjucow/hankki-atti-be` (Docker Hub, private · 동아리 계정) |
-| 태그 | `vX.Y.Z` + `latest`. 버전 태그는 Docker Hub에서 불변(덮어쓰기 불가)으로 설정돼 있다 |
+| 이미지 | `ghcr.io/cow-dev/hankki-atti-be` (COW-dev 조직 패키지, public). 레포가 공개이고 설정은 환경 변수로만 주입하므로 이미지도 공개한다 — pull에 인증이 필요 없다. 공개 범위는 레포를 따라가지 않으므로 패키지 설정에서 정한다 |
+| 태그 | `vX.Y.Z` + `latest`. GHCR에는 불변 태그 설정이 없어, `docker` job이 같은 버전 태그가 이미 있으면 push하지 않고 실패한다 |
 | 플랫폼 | `linux/amd64`, `linux/arm64` |
-| Secrets | `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN` (Docker Hub Personal access token, Read & Write) |
+| 인증 | 별도 Secret 없음 — `docker` job의 `GITHUB_TOKEN`(`packages: write`)으로 push하고, 이때 패키지가 이 레포에 자동 연결된다. CI 밖에서 개인 토큰으로 먼저 push하면 레포에 연결되지 않은 패키지가 생겨 `GITHUB_TOKEN` push가 막히므로 직접 push하지 않는다 |
 | 워크플로우 | `.github/workflows/ci.yml`의 `version` → `docker` job, 버전 계산은 `.github/scripts/release-version.sh` |
 
 **버전 규칙**
@@ -447,7 +447,7 @@ main에 병합되고 CI 검사(`test`, `secret-scan`, `agent-config`)가 모두 
 **이미지 실행에 필요한 환경 변수**: `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, `SPRING_DATASOURCE_PASSWORD`. 기본 프로필은 `prod`, 시간대는 Asia/Seoul로 고정, 포트 8080.
 문자 발송(선택): `SMS_SNS_ENABLED=true`, `SMS_SNS_REGION`(기본 ap-northeast-2), `AWS_ACCESS_KEY_ID`·`AWS_SECRET_ACCESS_KEY`(`sns:Publish`만 허용한 IAM 키). 꺼져 있으면 문자는 발송 대기로 남는다.
 
-**롤백**: 서버에서 이전 버전 태그를 pull해 다시 띄운다 (`docker pull mjucow/hankki-atti-be:vX.Y.Z`).
+**롤백**: 이전 버전 태그로 다시 띄운다 (`docker pull ghcr.io/cow-dev/hankki-atti-be:vX.Y.Z`).
 
 ---
 

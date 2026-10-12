@@ -22,6 +22,8 @@ import com.hankkiatti.domain.helprequest.entity.HelpRequestStatus;
 import com.hankkiatti.domain.helprequest.entity.HelpType;
 import com.hankkiatti.domain.helprequest.repository.HelpRequestRepository;
 import com.hankkiatti.domain.mail.repository.MailOutboxRepository;
+import com.hankkiatti.domain.notification.entity.NotificationJob;
+import com.hankkiatti.domain.notification.entity.NotificationJobType;
 import com.hankkiatti.domain.notification.repository.NotificationJobRepository;
 import com.hankkiatti.domain.notification.repository.NotificationRepository;
 import com.hankkiatti.domain.sms.repository.SmsOutboxRepository;
@@ -156,6 +158,21 @@ class AdminStudentDeactivationConcurrencyTest {
         assertThat(applicationRepository.findAll())
                 .allSatisfy(application -> assertThat(application.getStatus())
                         .isEqualTo(ApplicationStatus.STUDENT_CANCELED));
+    }
+
+    @Test
+    void deactivate_매칭된도우미에게학생취소알림작업을남긴다() {
+        // given
+        Long applicationId = applicationService.apply(helperId, helpRequestId).applicationId();
+
+        // when
+        adminStudentService.deactivate(adminId, studentId);
+
+        // then — 장애학생 매칭 취소와 같은 "학생 취소" 알림 (#37)
+        assertThat(notificationJobRepository.findAll())
+                .filteredOn(job -> job.getType() == NotificationJobType.STUDENT_CANCELED)
+                .extracting(NotificationJob::getTargetId)
+                .containsExactly(applicationId);
     }
 
     private List<Object> runConcurrently(List<Callable<Object>> tasks) throws Exception {
