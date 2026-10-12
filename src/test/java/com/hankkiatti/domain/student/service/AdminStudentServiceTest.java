@@ -9,6 +9,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import com.hankkiatti.domain.account.entity.Account;
 import com.hankkiatti.domain.account.entity.AccountRole;
@@ -27,6 +28,7 @@ import com.hankkiatti.domain.helper.entity.Helper;
 import com.hankkiatti.domain.helprequest.entity.HelpRequest;
 import com.hankkiatti.domain.helprequest.entity.HelpRequestStatus;
 import com.hankkiatti.domain.helprequest.entity.HelpType;
+import com.hankkiatti.domain.helprequest.event.HelpRequestCanceledByStudentEvent;
 import com.hankkiatti.domain.helprequest.repository.HelpRequestRepository;
 import com.hankkiatti.domain.mail.entity.MailType;
 import com.hankkiatti.domain.mail.service.MailOutboxService;
@@ -62,6 +64,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -99,6 +102,9 @@ class AdminStudentServiceTest {
     @Mock
     private SmsConsentHistory smsConsentHistory;
 
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
+
     private Clock clock;
     private AdminStudentService adminStudentService;
 
@@ -108,7 +114,7 @@ class AdminStudentServiceTest {
         adminStudentService = new AdminStudentService(
                 adminRepository, accountRepository, studentRepository, helpRequestRepository,
                 applicationRepository, passwordResetTokenRepository, mailOutboxService, passwordEncoder,
-                smsConsentHistory, clock);
+                smsConsentHistory, eventPublisher, clock);
     }
 
     private AdminStudentCreateRequestDto request() {
@@ -361,6 +367,8 @@ class AdminStudentServiceTest {
         Application matchedApplication = new Application(matched, helper, NOW);
         matchedApplication.match(NOW);
         Application waitingApplication = new Application(matched, helper, NOW.plusMinutes(1));
+        ReflectionTestUtils.setField(matchedApplication, "id", 201L);
+        ReflectionTestUtils.setField(waitingApplication, "id", 202L);
 
         given(accountRepository.findByIdForUpdate(10L)).willReturn(Optional.of(account));
         given(studentRepository.findByIdForUpdate(10L)).willReturn(Optional.of(student));
@@ -383,6 +391,10 @@ class AdminStudentServiceTest {
         assertThat(waitingApplication.getStatus()).isEqualTo(ApplicationStatus.STUDENT_CANCELED);
         assertThat(result.status()).isEqualTo(AccountStatus.INACTIVE);
         verify(passwordResetTokenRepository).invalidateAllByAccountId(10L, NOW);
+        // 장애학생 매칭 취소와 같은 알림 — 지원이 있던 신청만, 매칭·예비 도우미 모두 (#37)
+        verify(eventPublisher).publishEvent(
+                new HelpRequestCanceledByStudentEvent(102L, matched.getStartAt(), List.of(201L, 202L)));
+        verifyNoMoreInteractions(eventPublisher);
 
         InOrder lockOrder = org.mockito.Mockito.inOrder(
                 accountRepository, studentRepository, helpRequestRepository, applicationRepository);
