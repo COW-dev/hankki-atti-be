@@ -14,6 +14,7 @@ import com.hankkiatti.domain.auth.repository.PasswordResetTokenRepository;
 import com.hankkiatti.domain.auth.service.TemporaryPasswords;
 import com.hankkiatti.domain.common.PhoneNumbers;
 import com.hankkiatti.domain.helprequest.entity.HelpRequest;
+import com.hankkiatti.domain.helprequest.event.HelpRequestCanceledByStudentEvent;
 import com.hankkiatti.domain.helprequest.repository.HelpRequestRepository;
 import com.hankkiatti.domain.mail.entity.MailType;
 import com.hankkiatti.domain.mail.service.MailOutboxService;
@@ -31,8 +32,8 @@ import com.hankkiatti.domain.student.entity.DisabilityType;
 import com.hankkiatti.domain.student.entity.Student;
 import com.hankkiatti.domain.student.exception.StudentErrorType;
 import com.hankkiatti.domain.student.exception.StudentException;
-import com.hankkiatti.domain.student.repository.StudentRepository;
 import com.hankkiatti.domain.student.repository.StudentRecentRequestProjection;
+import com.hankkiatti.domain.student.repository.StudentRepository;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -41,6 +42,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -63,6 +65,7 @@ public class AdminStudentService {
     private final MailOutboxService mailOutboxService;
     private final PasswordEncoder passwordEncoder;
     private final SmsConsentHistory smsConsentHistory;
+    private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
 
     @Transactional(readOnly = true)
@@ -139,6 +142,11 @@ public class AdminStudentService {
             activeApplications.forEach(Application::cancelByStudent);
             canceledApplications += activeApplications.size();
             helpRequest.cancelByDeactivation(now);
+            // 장애학생 매칭 취소와 같게 매칭·예비 도우미 모두에게 "학생 취소" 알림 (명세: 비활성화는 학생 취소와 같게, #37)
+            if (!activeApplications.isEmpty()) {
+                eventPublisher.publishEvent(new HelpRequestCanceledByStudentEvent(requestId,
+                        helpRequest.getStartAt(), activeApplications.stream().map(Application::getId).toList()));
+            }
         }
 
         account.deactivate(now);
