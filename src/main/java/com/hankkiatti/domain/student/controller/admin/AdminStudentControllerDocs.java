@@ -6,6 +6,7 @@ import com.hankkiatti.domain.student.dto.request.AdminStudentUpdateRequestDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentAccountStatusResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentCreateResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentCredentialMailResponseDto;
+import com.hankkiatti.domain.student.dto.response.AdminStudentDeactivationPreviewResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentInfoResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentSummaryResponseDto;
 import com.hankkiatti.domain.student.entity.DisabilityType;
@@ -50,6 +51,17 @@ public interface AdminStudentControllerDocs {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "장애학생 없음")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "계정정보 메일 발송 중")
     ResponseEntity<ApiResult<AdminStudentCredentialMailResponseDto>> resendCredentialMail(
+            @Parameter(hidden = true) AuthPrincipal principal,
+            @Parameter(description = "학생 계정 ID") Long studentAccountId);
+
+    @Operation(summary = "장애학생 계정 비활성화 미리보기", description = """
+            비활성화 확인 모달에 표시할 진행 중 신청 수를 조회합니다.
+            전체 권한 관리자만 사용할 수 있으며, 이미 비활성화된 계정이면 alreadyInactive가 true입니다.
+            """)
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "전체 권한 관리자만 사용 가능")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "장애학생 없음")
+    ResponseEntity<ApiResult<AdminStudentDeactivationPreviewResponseDto>> previewDeactivation(
             @Parameter(hidden = true) AuthPrincipal principal,
             @Parameter(description = "학생 계정 ID") Long studentAccountId);
 

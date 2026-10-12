@@ -6,6 +6,7 @@ import com.hankkiatti.domain.student.dto.request.AdminStudentUpdateRequestDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentAccountStatusResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentCreateResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentCredentialMailResponseDto;
+import com.hankkiatti.domain.student.dto.response.AdminStudentDeactivationPreviewResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentInfoResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentSummaryResponseDto;
 import com.hankkiatti.domain.student.entity.DisabilityType;
@@ -63,6 +64,15 @@ public class AdminStudentController implements AdminStudentControllerDocs {
             @PathVariable Long studentAccountId) {
         return ApiResponse.of(SuccessType.SUCCESS,
                 adminStudentService.resendCredentialMail(principal.accountId(), studentAccountId));
+    }
+
+    @Override
+    @GetMapping("/{studentAccountId}/deactivation-preview")
+    public ResponseEntity<ApiResult<AdminStudentDeactivationPreviewResponseDto>> previewDeactivation(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @PathVariable Long studentAccountId) {
+        return ApiResponse.of(SuccessType.SUCCESS,
+                adminStudentService.previewDeactivation(principal.accountId(), studentAccountId));
     }
 
     @Override

@@ -39,6 +39,7 @@ import com.hankkiatti.domain.student.dto.request.AdminStudentUpdateRequestDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentAccountStatusResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentCreateResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentCredentialMailResponseDto;
+import com.hankkiatti.domain.student.dto.response.AdminStudentDeactivationPreviewResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentInfoResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentSummaryResponseDto;
 import com.hankkiatti.domain.student.entity.CredentialMailStatus;
@@ -352,6 +353,50 @@ class AdminStudentServiceTest {
                 .extracting("errorCode").isEqualTo(StudentErrorType.CREDENTIAL_MAIL_PENDING);
         verify(passwordEncoder, never()).encode(anyString());
         verify(mailOutboxService, never()).enqueue(any(), anyString(), anyString(), anyString(), any());
+    }
+
+    @Test
+    void previewDeactivation_전체권한관리자_취소될진행중신청수를조회한다() {
+        // given
+        givenFullAdmin();
+        Student student = student(studentAccount(10L));
+        given(studentRepository.findById(10L)).willReturn(Optional.of(student));
+        given(helpRequestRepository.countActiveByStudentAccountId(10L)).willReturn(2L);
+
+        // when
+        AdminStudentDeactivationPreviewResponseDto result =
+                adminStudentService.previewDeactivation(ADMIN_ID, 10L);
+
+        // then
+        assertThat(result.accountId()).isEqualTo(10L);
+        assertThat(result.alreadyInactive()).isFalse();
+        assertThat(result.activeRequestCount()).isEqualTo(2);
+    }
+
+    @Test
+    void previewDeactivation_제한권한관리자_ACCESS_DENIED() {
+        // given
+        given(adminRepository.findById(ADMIN_ID)).willReturn(Optional.of(admin(AdminGrade.LIMITED)));
+
+        // when & then
+        assertThatThrownBy(() -> adminStudentService.previewDeactivation(ADMIN_ID, 10L))
+                .isInstanceOf(AuthException.class)
+                .extracting("errorCode").isEqualTo(AuthErrorType.ACCESS_DENIED);
+        verify(studentRepository, never()).findById(any());
+        verify(helpRequestRepository, never()).countActiveByStudentAccountId(any());
+    }
+
+    @Test
+    void previewDeactivation_없는학생_NOT_FOUND() {
+        // given
+        givenFullAdmin();
+        given(studentRepository.findById(99L)).willReturn(Optional.empty());
+
+        // when & then
+        assertThatThrownBy(() -> adminStudentService.previewDeactivation(ADMIN_ID, 99L))
+                .isInstanceOf(StudentException.class)
+                .extracting("errorCode").isEqualTo(StudentErrorType.NOT_FOUND);
+        verify(helpRequestRepository, never()).countActiveByStudentAccountId(any());
     }
 
     @Test
