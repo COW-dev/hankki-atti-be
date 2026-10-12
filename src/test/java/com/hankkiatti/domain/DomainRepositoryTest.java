@@ -201,10 +201,12 @@ class DomainRepositoryTest {
 
         // when
         List<Long> requestIds = helpRequestRepository.findActiveIdsByStudentAccountId(student.getAccountId());
+        long requestCount = helpRequestRepository.countActiveByStudentAccountId(student.getAccountId());
         List<Application> applications = applicationRepository.findActiveForUpdate(matched.getId());
 
         // then
         assertThat(requestIds).containsExactly(recruiting.getId(), matched.getId());
+        assertThat(requestCount).isEqualTo(2);
         assertThat(applications).extracting(Application::getId)
                 .containsExactly(matchedApplication.getId(), waitingApplication.getId());
     }

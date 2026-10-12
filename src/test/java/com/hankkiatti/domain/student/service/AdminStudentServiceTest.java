@@ -14,6 +14,8 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import com.hankkiatti.domain.account.entity.Account;
 import com.hankkiatti.domain.account.entity.AccountRole;
 import com.hankkiatti.domain.account.entity.AccountStatus;
+import com.hankkiatti.domain.account.exception.AccountErrorType;
+import com.hankkiatti.domain.account.exception.AccountException;
 import com.hankkiatti.domain.account.repository.AccountRepository;
 import com.hankkiatti.domain.admin.entity.Admin;
 import com.hankkiatti.domain.admin.entity.AdminGrade;
@@ -39,6 +41,7 @@ import com.hankkiatti.domain.student.dto.request.AdminStudentUpdateRequestDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentAccountStatusResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentCreateResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentCredentialMailResponseDto;
+import com.hankkiatti.domain.student.dto.response.AdminStudentDeactivationPreviewResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentInfoResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentSummaryResponseDto;
 import com.hankkiatti.domain.student.entity.CredentialMailStatus;
@@ -355,6 +358,50 @@ class AdminStudentServiceTest {
     }
 
     @Test
+    void previewDeactivation_전체권한관리자_취소될진행중신청수를조회한다() {
+        // given
+        givenFullAdmin();
+        Student student = student(studentAccount(10L));
+        given(studentRepository.findById(10L)).willReturn(Optional.of(student));
+        given(helpRequestRepository.countActiveByStudentAccountId(10L)).willReturn(2L);
+
+        // when
+        AdminStudentDeactivationPreviewResponseDto result =
+                adminStudentService.previewDeactivation(ADMIN_ID, 10L);
+
+        // then
+        assertThat(result.accountId()).isEqualTo(10L);
+        assertThat(result.alreadyInactive()).isFalse();
+        assertThat(result.activeRequestCount()).isEqualTo(2);
+    }
+
+    @Test
+    void previewDeactivation_제한권한관리자_ACCESS_DENIED() {
+        // given
+        given(adminRepository.findById(ADMIN_ID)).willReturn(Optional.of(admin(AdminGrade.LIMITED)));
+
+        // when & then
+        assertThatThrownBy(() -> adminStudentService.previewDeactivation(ADMIN_ID, 10L))
+                .isInstanceOf(AuthException.class)
+                .extracting("errorCode").isEqualTo(AuthErrorType.ACCESS_DENIED);
+        verify(studentRepository, never()).findById(any());
+        verify(helpRequestRepository, never()).countActiveByStudentAccountId(any());
+    }
+
+    @Test
+    void previewDeactivation_없는학생_NOT_FOUND() {
+        // given
+        givenFullAdmin();
+        given(studentRepository.findById(99L)).willReturn(Optional.empty());
+
+        // when & then
+        assertThatThrownBy(() -> adminStudentService.previewDeactivation(ADMIN_ID, 99L))
+                .isInstanceOf(StudentException.class)
+                .extracting("errorCode").isEqualTo(StudentErrorType.NOT_FOUND);
+        verify(helpRequestRepository, never()).countActiveByStudentAccountId(any());
+    }
+
+    @Test
     void deactivate_진행중신청과활성지원을취소하고계정을비활성화한다() {
         // given
         givenFullAdmin();
@@ -405,6 +452,59 @@ class AdminStudentServiceTest {
         lockOrder.verify(applicationRepository).findActiveForUpdate(101L);
         lockOrder.verify(helpRequestRepository).findByIdForUpdate(102L);
         lockOrder.verify(applicationRepository).findActiveForUpdate(102L);
+    }
+
+    @Test
+    void activate_비활성학생_계정을재활성화하고취소된신청은복원하지않는다() {
+        // given
+        givenFullAdmin();
+        Account account = studentAccount(10L);
+        account.deactivate(NOW.minusDays(1));
+        Student student = student(account);
+        given(accountRepository.findByIdForUpdate(10L)).willReturn(Optional.of(account));
+        given(studentRepository.findByIdForUpdate(10L)).willReturn(Optional.of(student));
+
+        // when
+        AdminStudentAccountStatusResponseDto result = adminStudentService.activate(ADMIN_ID, 10L);
+
+        // then
+        assertThat(account.getStatus()).isEqualTo(AccountStatus.ACTIVE);
+        assertThat(account.getDeactivatedAt()).isNull();
+        assertThat(result.status()).isEqualTo(AccountStatus.ACTIVE);
+        assertThat(result.deactivatedAt()).isNull();
+        verify(helpRequestRepository, never()).findActiveIdsByStudentAccountId(any());
+
+        InOrder lockOrder = org.mockito.Mockito.inOrder(accountRepository, studentRepository);
+        lockOrder.verify(accountRepository).findByIdForUpdate(10L);
+        lockOrder.verify(studentRepository).findByIdForUpdate(10L);
+    }
+
+    @Test
+    void activate_이미활성계정_ALREADY_ACTIVE() {
+        // given
+        givenFullAdmin();
+        Account account = studentAccount(10L);
+        Student student = student(account);
+        given(accountRepository.findByIdForUpdate(10L)).willReturn(Optional.of(account));
+        given(studentRepository.findByIdForUpdate(10L)).willReturn(Optional.of(student));
+
+        // when & then
+        assertThatThrownBy(() -> adminStudentService.activate(ADMIN_ID, 10L))
+                .isInstanceOf(AccountException.class)
+                .extracting("errorCode").isEqualTo(AccountErrorType.ALREADY_ACTIVE);
+    }
+
+    @Test
+    void activate_제한권한관리자_ACCESS_DENIED() {
+        // given
+        given(adminRepository.findById(ADMIN_ID)).willReturn(Optional.of(admin(AdminGrade.LIMITED)));
+
+        // when & then
+        assertThatThrownBy(() -> adminStudentService.activate(ADMIN_ID, 10L))
+                .isInstanceOf(AuthException.class)
+                .extracting("errorCode").isEqualTo(AuthErrorType.ACCESS_DENIED);
+        verify(accountRepository, never()).findByIdForUpdate(any());
+        verify(studentRepository, never()).findByIdForUpdate(any());
     }
 
     @Test

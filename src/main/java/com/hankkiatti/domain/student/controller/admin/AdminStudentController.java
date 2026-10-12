@@ -6,6 +6,7 @@ import com.hankkiatti.domain.student.dto.request.AdminStudentUpdateRequestDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentAccountStatusResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentCreateResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentCredentialMailResponseDto;
+import com.hankkiatti.domain.student.dto.response.AdminStudentDeactivationPreviewResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentInfoResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentSummaryResponseDto;
 import com.hankkiatti.domain.student.entity.DisabilityType;
@@ -66,12 +67,30 @@ public class AdminStudentController implements AdminStudentControllerDocs {
     }
 
     @Override
+    @GetMapping("/{studentAccountId}/deactivation-preview")
+    public ResponseEntity<ApiResult<AdminStudentDeactivationPreviewResponseDto>> previewDeactivation(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @PathVariable Long studentAccountId) {
+        return ApiResponse.of(SuccessType.SUCCESS,
+                adminStudentService.previewDeactivation(principal.accountId(), studentAccountId));
+    }
+
+    @Override
     @PatchMapping("/{studentAccountId}/deactivate")
     public ResponseEntity<ApiResult<AdminStudentAccountStatusResponseDto>> deactivate(
             @AuthenticationPrincipal AuthPrincipal principal,
             @PathVariable Long studentAccountId) {
         return ApiResponse.of(SuccessType.SUCCESS,
                 adminStudentService.deactivate(principal.accountId(), studentAccountId));
+    }
+
+    @Override
+    @PatchMapping("/{studentAccountId}/activate")
+    public ResponseEntity<ApiResult<AdminStudentAccountStatusResponseDto>> activate(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @PathVariable Long studentAccountId) {
+        return ApiResponse.of(SuccessType.SUCCESS,
+                adminStudentService.activate(principal.accountId(), studentAccountId));
     }
 
     @Override

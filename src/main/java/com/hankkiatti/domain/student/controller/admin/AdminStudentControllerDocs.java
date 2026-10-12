@@ -6,6 +6,7 @@ import com.hankkiatti.domain.student.dto.request.AdminStudentUpdateRequestDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentAccountStatusResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentCreateResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentCredentialMailResponseDto;
+import com.hankkiatti.domain.student.dto.response.AdminStudentDeactivationPreviewResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentInfoResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentSummaryResponseDto;
 import com.hankkiatti.domain.student.entity.DisabilityType;
@@ -53,6 +54,17 @@ public interface AdminStudentControllerDocs {
             @Parameter(hidden = true) AuthPrincipal principal,
             @Parameter(description = "학생 계정 ID") Long studentAccountId);
 
+    @Operation(summary = "장애학생 계정 비활성화 미리보기", description = """
+            비활성화 확인 모달에 표시할 진행 중 신청 수를 조회합니다.
+            전체 권한 관리자만 사용할 수 있으며, 이미 비활성화된 계정이면 alreadyInactive가 true입니다.
+            """)
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "전체 권한 관리자만 사용 가능")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "장애학생 없음")
+    ResponseEntity<ApiResult<AdminStudentDeactivationPreviewResponseDto>> previewDeactivation(
+            @Parameter(hidden = true) AuthPrincipal principal,
+            @Parameter(description = "학생 계정 ID") Long studentAccountId);
+
     @Operation(summary = "장애학생 계정 비활성화", description = """
             전체 권한 관리자가 계정을 비활성화합니다. 기존 로그인 토큰과 비밀번호 재설정 링크를 무효화하고,
             진행 중인 신청과 해당 신청의 활성 지원을 함께 취소합니다.
@@ -62,6 +74,18 @@ public interface AdminStudentControllerDocs {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "장애학생 없음")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "이미 비활성화된 계정")
     ResponseEntity<ApiResult<AdminStudentAccountStatusResponseDto>> deactivate(
+            @Parameter(hidden = true) AuthPrincipal principal,
+            @Parameter(description = "학생 계정 ID") Long studentAccountId);
+
+    @Operation(summary = "장애학생 계정 재활성화", description = """
+            전체 권한 관리자가 비활성화된 장애학생 계정을 다시 활성화합니다.
+            비활성화할 때 취소된 신청과 지원은 복원하지 않습니다.
+            """)
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "재활성화 성공")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "전체 권한 관리자만 사용 가능")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "장애학생 없음")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "이미 활성화된 계정")
+    ResponseEntity<ApiResult<AdminStudentAccountStatusResponseDto>> activate(
             @Parameter(hidden = true) AuthPrincipal principal,
             @Parameter(description = "학생 계정 ID") Long studentAccountId);
 

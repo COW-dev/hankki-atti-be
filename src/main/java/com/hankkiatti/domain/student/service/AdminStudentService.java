@@ -25,6 +25,7 @@ import com.hankkiatti.domain.student.dto.request.AdminStudentUpdateRequestDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentAccountStatusResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentCreateResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentCredentialMailResponseDto;
+import com.hankkiatti.domain.student.dto.response.AdminStudentDeactivationPreviewResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentInfoResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentSummaryResponseDto;
 import com.hankkiatti.domain.student.entity.CredentialMailStatus;
@@ -123,6 +124,18 @@ public class AdminStudentService {
         return toCredentialMailResponse(account, student);
     }
 
+    @Transactional(readOnly = true)
+    public AdminStudentDeactivationPreviewResponseDto previewDeactivation(Long adminAccountId,
+                                                                          Long studentAccountId) {
+        requireFullAdmin(adminAccountId);
+        Student student = studentRepository.findById(studentAccountId)
+                .orElseThrow(() -> new StudentException(StudentErrorType.NOT_FOUND,
+                        "studentAccountId=" + studentAccountId));
+        long activeRequestCount = helpRequestRepository.countActiveByStudentAccountId(studentAccountId);
+        return new AdminStudentDeactivationPreviewResponseDto(
+                studentAccountId, !student.getAccount().isActive(), activeRequestCount);
+    }
+
     @Transactional
     public AdminStudentAccountStatusResponseDto deactivate(Long adminAccountId, Long studentAccountId) {
         requireFullAdmin(adminAccountId);
@@ -153,6 +166,18 @@ public class AdminStudentService {
         passwordResetTokenRepository.invalidateAllByAccountId(studentAccountId, now);
         log.info("장애학생 계정 비활성화: accountId={}, requests={}, applications={}",
                 studentAccountId, activeRequestIds.size(), canceledApplications);
+        return new AdminStudentAccountStatusResponseDto(
+                account.getId(), account.getStatus(), account.getDeactivatedAt());
+    }
+
+    @Transactional
+    public AdminStudentAccountStatusResponseDto activate(Long adminAccountId, Long studentAccountId) {
+        requireFullAdmin(adminAccountId);
+        Account account = findStudentAccountForUpdate(studentAccountId);
+        findStudentForUpdate(studentAccountId);
+
+        account.activate();
+        log.info("장애학생 계정 재활성화: accountId={}", studentAccountId);
         return new AdminStudentAccountStatusResponseDto(
                 account.getId(), account.getStatus(), account.getDeactivatedAt());
     }
