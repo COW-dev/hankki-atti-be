@@ -47,6 +47,24 @@ public class NotificationService {
     }
 
     /**
+     * 같은 알림을 여러 사람에게 한 번에 쌓는다 (공지 게시). 부르는 쪽 트랜잭션에서 모두 저장되거나 모두 롤백된다.
+     */
+    @Transactional
+    public void notifyAll(List<Long> recipientIds, NotificationType type, String message,
+                          NotificationTargetType targetType, Long targetId) {
+        if (recipientIds.isEmpty()) {
+            log.info("알림 받을 사람 없음: type={}, targetType={}, targetId={}", type, targetType, targetId);
+            return;
+        }
+        notificationRepository.saveAll(recipientIds.stream()
+                .map(recipientId -> new Notification(accountRepository.getReferenceById(recipientId), type, message,
+                        targetType, targetId))
+                .toList());
+        log.info("알림 일괄 저장: type={}, targetType={}, targetId={}, count={}",
+                type, targetType, targetId, recipientIds.size());
+    }
+
+    /**
      * 내 알림 최신순. cursor는 앞 페이지의 nextCursor. 하나 더 읽어 다음 페이지가 있는지 판단한다.
      */
     @Transactional(readOnly = true)

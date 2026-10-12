@@ -1,6 +1,7 @@
 package com.hankkiatti.domain.notification.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -10,12 +11,17 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.hankkiatti.domain.account.entity.AccountRole;
+import com.hankkiatti.domain.admin.entity.Admin;
+import com.hankkiatti.domain.admin.entity.AdminGrade;
 import com.hankkiatti.domain.application.entity.Application;
 import com.hankkiatti.domain.application.event.HelperConfirmedEvent;
 import com.hankkiatti.domain.application.repository.ApplicationRepository;
 import com.hankkiatti.domain.helper.entity.Helper;
 import com.hankkiatti.domain.helprequest.entity.HelpRequest;
 import com.hankkiatti.domain.helprequest.repository.HelpRequestRepository;
+import com.hankkiatti.domain.notice.entity.Notice;
+import com.hankkiatti.domain.notice.entity.NoticeTarget;
+import com.hankkiatti.domain.notice.repository.NoticeRepository;
 import com.hankkiatti.domain.notification.entity.NotificationJob;
 import com.hankkiatti.domain.notification.entity.NotificationJobStatus;
 import com.hankkiatti.domain.notification.entity.NotificationJobType;
@@ -49,12 +55,16 @@ class NotificationDispatcherTest {
     private static final Long REQUEST_ID = 10L;
     private static final Long APPLICATION_ID = 31L;
     private static final Long JOB_ID = 500L;
+    private static final Long NOTICE_ID = 70L;
 
     @Mock
     private ApplicationRepository applicationRepository;
 
     @Mock
     private HelpRequestRepository helpRequestRepository;
+
+    @Mock
+    private NoticeRepository noticeRepository;
 
     @Mock
     private NotificationJobRepository notificationJobRepository;
@@ -76,8 +86,8 @@ class NotificationDispatcherTest {
     void setUp() {
         NotificationJobProperties jobProperties = new NotificationJobProperties(50,
                 List.of(Duration.ofMinutes(1), Duration.ofMinutes(1), Duration.ofMinutes(1)), Duration.ofMinutes(5));
-        dispatcher = new NotificationDispatcher(applicationRepository, helpRequestRepository, notificationJobRepository,
-                notificationService, new NotificationMessages(), outboxSender, jobProperties);
+        dispatcher = new NotificationDispatcher(applicationRepository, helpRequestRepository, noticeRepository,
+                notificationJobRepository, notificationService, new NotificationMessages(), outboxSender, jobProperties);
         student = TestHelpRequests.student("60231234");
         ReflectionTestUtils.setField(student, "accountId", STUDENT_ID);
         request = TestHelpRequests.request(student, NOON);
@@ -263,6 +273,46 @@ class NotificationDispatcherTest {
         // then
         verifyNoInteractions(notificationService, outboxSender);
         assertThat(job.getStatus()).isEqualTo(NotificationJobStatus.DONE);
+    }
+
+    @Test
+    void process_공지게시_대상전원에게인앱알림만() {
+        // given
+        Notice notice = notice(NoticeTarget.HELPER);
+        given(noticeRepository.findById(NOTICE_ID)).willReturn(Optional.of(notice));
+        given(noticeRepository.findRecipientAccountIds(NoticeTarget.HELPER)).willReturn(List.of(7L, 8L));
+
+        // when
+        NotificationJob job = process(NotificationJobType.NOTICE_PUBLISHED, NOTICE_ID, null);
+
+        // then
+        verify(notificationService).notifyAll(List.of(7L, 8L), NotificationType.NOTICE_PUBLISHED,
+                "새 공지가 올라왔어요: 도우미 취소·패널티 기준 안내", NotificationTargetType.NOTICE, NOTICE_ID);
+        verifyNoInteractions(outboxSender);
+        assertThat(job.getStatus()).isEqualTo(NotificationJobStatus.DONE);
+    }
+
+    @Test
+    void process_처리전에삭제된공지_알림없이완료() {
+        // given
+        Notice notice = notice(NoticeTarget.ALL);
+        notice.delete(NOW);
+        given(noticeRepository.findById(NOTICE_ID)).willReturn(Optional.of(notice));
+
+        // when
+        NotificationJob job = process(NotificationJobType.NOTICE_PUBLISHED, NOTICE_ID, null);
+
+        // then
+        verify(noticeRepository, never()).findRecipientAccountIds(any());
+        verifyNoInteractions(notificationService, outboxSender);
+        assertThat(job.getStatus()).isEqualTo(NotificationJobStatus.DONE);
+    }
+
+    private Notice notice(NoticeTarget target) {
+        Admin admin = new Admin(TestAccounts.withId(90L, AccountRole.ADMIN, "hash", false), "홍길동", AdminGrade.FULL);
+        Notice notice = new Notice(admin, "도우미 취소·패널티 기준 안내", "본문", target, false, NOW);
+        ReflectionTestUtils.setField(notice, "id", NOTICE_ID);
+        return notice;
     }
 
     @Test

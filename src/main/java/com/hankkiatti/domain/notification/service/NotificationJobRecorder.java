@@ -7,6 +7,7 @@ import com.hankkiatti.domain.application.event.WaitingRegisteredEvent;
 import com.hankkiatti.domain.helprequest.event.HelpRequestCanceledByStudentEvent;
 import com.hankkiatti.domain.helprequest.event.HelpRequestFailedEvent;
 import com.hankkiatti.domain.helprequest.event.HelpRequestReopenedEvent;
+import com.hankkiatti.domain.notice.event.NoticePublishedEvent;
 import com.hankkiatti.domain.notification.entity.NotificationJob;
 import com.hankkiatti.domain.notification.entity.NotificationJobType;
 import com.hankkiatti.domain.notification.repository.NotificationJobRepository;
@@ -19,7 +20,7 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
- * 매칭·취소 이벤트를 받아 업무 트랜잭션 안에서 알림 작업을 저장한다 — 업무가 커밋되면 작업도 반드시 남고, 롤백되면 같이 사라진다.
+ * 매칭·취소·공지 게시 이벤트를 받아 업무 트랜잭션 안에서 알림 작업을 저장한다 — 업무가 커밋되면 작업도 반드시 남고, 롤백되면 같이 사라진다.
  * 커밋 직후 같은 스레드에서 바로 처리하고, 놓치거나 실패한 작업은 NotificationJobPoller가 다시 처리한다.
  */
 @Component
@@ -65,6 +66,11 @@ public class NotificationJobRecorder {
     public void onCanceledByStudent(HelpRequestCanceledByStudentEvent event) {
         event.applicationIds().forEach(applicationId ->
                 record(NotificationJobType.STUDENT_CANCELED, applicationId, null));
+    }
+
+    @EventListener
+    public void onNoticePublished(NoticePublishedEvent event) {
+        record(NotificationJobType.NOTICE_PUBLISHED, event.noticeId(), null);
     }
 
     private void record(NotificationJobType type, Long targetId, String detail) {

@@ -12,6 +12,7 @@ import com.hankkiatti.domain.application.event.PromotionPendingEvent;
 import com.hankkiatti.domain.application.event.WaitingRegisteredEvent;
 import com.hankkiatti.domain.helprequest.event.HelpRequestCanceledByStudentEvent;
 import com.hankkiatti.domain.helprequest.event.HelpRequestFailedEvent;
+import com.hankkiatti.domain.notice.event.NoticePublishedEvent;
 import com.hankkiatti.domain.notification.entity.NotificationJob;
 import com.hankkiatti.domain.notification.entity.NotificationJobStatus;
 import com.hankkiatti.domain.notification.entity.NotificationJobType;
@@ -92,5 +93,16 @@ class NotificationJobRecorderTest {
             assertThat(job.getStatus()).isEqualTo(NotificationJobStatus.PENDING);
             assertThat(job.getNextAttemptAt()).isEqualTo(NOW);
         });
+    }
+
+    @Test
+    void 공지게시_공지ID를대상으로작업하나() {
+        // when
+        recorder.onNoticePublished(new NoticePublishedEvent(70L));
+
+        // then
+        assertThat(savedJobs(1))
+                .extracting(NotificationJob::getType, NotificationJob::getTargetId, NotificationJob::getDetail)
+                .containsExactly(tuple(NotificationJobType.NOTICE_PUBLISHED, 70L, null));
     }
 }

@@ -24,7 +24,9 @@ public enum NotificationJobType implements LabeledEnum {
     // 대상: 신청 ID
     REQUEST_FAILED("매칭 실패"),
     // 대상: 학생 사정 취소가 된 지원 ID (지원마다 작업 하나)
-    STUDENT_CANCELED("학생 취소");
+    STUDENT_CANCELED("학생 취소"),
+    // 대상: 공지 ID (대상 전원에게 한 번에 쌓는다)
+    NOTICE_PUBLISHED("새 공지");
 
     private final String label;
 }

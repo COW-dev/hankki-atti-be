@@ -24,7 +24,8 @@ class NotificationMessagesTest {
                 messages.requestFailed(NOON), messages.applicationMatched(NOON), messages.waitingRegistered(NOON, 99),
                 messages.promoted(NOON), messages.promotionResponseRequired(NOON, NOON.minusMinutes(15), false),
                 messages.promotionResponseRequired(NOON, NOON.minusMinutes(15), true),
-                messages.studentCanceled(NOON), messages.waitingExcluded(NOON));
+                messages.studentCanceled(NOON), messages.waitingExcluded(NOON),
+                messages.noticePublished("가".repeat(100)));
     }
 
     @Test
@@ -56,7 +57,7 @@ class NotificationMessagesTest {
 
     @Test
     void 공지를뺀모든알림종류에_문구가있다() {
-        // 공지(NOTICE_PUBLISHED)는 공지 기능(BE-70)에서 문구를 더한다
+        // 공지(NOTICE_PUBLISHED)는 식사 시각 대신 공지 제목을 채운다
         Arrays.stream(NotificationType.values())
                 .filter(type -> type != NotificationType.NOTICE_PUBLISHED)
                 .forEach(type -> assertThat(messages.format(type, NOON, "1"))
@@ -72,8 +73,35 @@ class NotificationMessagesTest {
     }
 
     @Test
-    void 문구가없는종류_키이름대신예외() {
-        assertThatThrownBy(() -> messages.format(NotificationType.NOTICE_PUBLISHED, NOON))
+    void 문구가없는키_키이름대신예외() {
+        // 예비 자동 제외는 메일을 보내지 않아 메일 제목이 없다
+        assertThatThrownBy(() -> messages.mailSubject(NotificationType.WAITING_EXCLUDED, false))
                 .isInstanceOf(NoSuchMessageException.class);
+    }
+
+    @Test
+    void noticePublished_제목을채움() {
+        assertThat(messages.noticePublished("10월 학식당 운영 시간 안내"))
+                .isEqualTo("새 공지가 올라왔어요: 10월 학식당 운영 시간 안내");
+    }
+
+    @Test
+    void noticePublished_따옴표중괄호도그대로() {
+        assertThat(messages.noticePublished("'아띠' {정기} 회의"))
+                .isEqualTo("새 공지가 올라왔어요: '아띠' {정기} 회의");
+    }
+
+    @Test
+    void noticePublished_문장이200자를넘으면_제목뒤를줄임표로() {
+        // given — 제목만 200자
+        String title = "가".repeat(200);
+
+        // when
+        String message = messages.noticePublished(title);
+
+        // then
+        assertThat(message).hasSize(Notification.MESSAGE_MAX_LENGTH)
+                .startsWith("새 공지가 올라왔어요: 가")
+                .endsWith("가…");
     }
 }
