@@ -31,7 +31,7 @@ Docker Desktop을 켠 상태에서 실행하면 `docker-compose.yml`의 MySQL �
 | `SPRING_MAIL_HOST`, `SPRING_MAIL_PORT`, `SPRING_MAIL_USERNAME`, `SPRING_MAIL_PASSWORD` | 메일 발송 (Gmail: `smtp.gmail.com`, `587`, 서비스 전용 Gmail 주소, 앱 비밀번호). 없으면 메일을 보내지 않고 발송 대기로 쌓아 두었다가 설정 후 보낸다 |
 
 ## Docker 이미지
-main에 병합되고 CI가 통과하면 `mjucow/hankki-atti-be:vX.Y.Z`(+ `latest`)가 Docker Hub에 올라갑니다. 버전·배포 규칙은 [AGENTS.md — 배포 (CD)](AGENTS.md#배포-cd)를 참고하세요.
+main에 병합되고 CI가 통과하면 `ghcr.io/cow-dev/hankki-atti-be:vX.Y.Z`(+ `latest`)가 GitHub Container Registry에 올라갑니다. 버전·배포 규칙은 [AGENTS.md — 배포 (CD)](AGENTS.md#배포-cd)를 참고하세요.
 
 ```bash
 docker run -d -p 8080:8080 \
@@ -39,7 +39,7 @@ docker run -d -p 8080:8080 \
   -e SPRING_DATASOURCE_USERNAME=<user> \
   -e SPRING_DATASOURCE_PASSWORD=<password> \
   -e CORS_ALLOWED_ORIGINS=<프론트 주소> \
-  mjucow/hankki-atti-be:latest
+  ghcr.io/cow-dev/hankki-atti-be:latest
 ```
 
 ## 관리자 계정 만들기
