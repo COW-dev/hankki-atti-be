@@ -73,6 +73,6 @@ public interface AuthControllerDocs {
     @SecurityRequirements
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "변경 성공")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "410", description = "만료·사용됨·새 요청으로 무효 (구분하지 않음)")
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "422", description = "비밀번호 규칙 위반")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "422", description = "비밀번호 규칙 위반, 현재 비밀번호와 같음(AUTH_SAME_AS_CURRENT_PASSWORD — 링크는 그대로 쓸 수 있음)")
     ResponseEntity<ApiResult<Void>> confirmPasswordReset(PasswordResetConfirmRequestDto request);
 }

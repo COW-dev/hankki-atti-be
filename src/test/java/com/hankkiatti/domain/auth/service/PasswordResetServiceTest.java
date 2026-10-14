@@ -282,6 +282,27 @@ class PasswordResetServiceTest {
     }
 
     @Test
+    void confirm_현재비밀번호와같은값_SAME_AS_CURRENT_PASSWORD이고링크는그대로() {
+        // given — 초기 비밀번호를 받은 장애학생이 재설정으로 같은 값을 넣는다
+        Account account = TestAccounts.withId(1L, AccountRole.STUDENT, "initial-hash", true);
+        PasswordResetToken token = tokenIssuedAt(account, NOW.minusMinutes(5));
+        String tokenHash = AuthTokenService.hash(RAW_TOKEN);
+        given(passwordResetTokenRepository.findAccountIdByTokenHash(tokenHash)).willReturn(Optional.of(1L));
+        given(accountRepository.findByIdForUpdate(1L)).willReturn(Optional.of(account));
+        given(passwordResetTokenRepository.findByTokenHashForUpdate(tokenHash)).willReturn(Optional.of(token));
+        given(passwordEncoder.matches("initialPw!2026", "initial-hash")).willReturn(true);
+
+        // when & then
+        assertThatThrownBy(() ->
+                passwordResetService.confirm(new PasswordResetConfirmRequestDto(RAW_TOKEN, "initialPw!2026")))
+                .isInstanceOf(AuthException.class)
+                .extracting("errorCode").isEqualTo(AuthErrorType.SAME_AS_CURRENT_PASSWORD);
+        assertThat(account.isMustChangePassword()).isTrue();
+        assertThat(token.getUsedAt()).isNull();
+        verify(authTokenService, never()).revokeAll(anyLong(), any());
+    }
+
+    @Test
     void confirm_이미사용된링크_410이고비밀번호그대로() {
         // given
         Account account = TestAccounts.withId(1L, AccountRole.STUDENT, "old-hash", false);
