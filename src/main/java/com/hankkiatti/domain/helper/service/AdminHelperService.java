@@ -15,6 +15,7 @@ import com.hankkiatti.domain.application.repository.VolunteerHourChangeRepositor
 import com.hankkiatti.domain.application.service.AdminVolunteerHourService;
 import com.hankkiatti.domain.auth.repository.PasswordResetTokenRepository;
 import com.hankkiatti.domain.auth.service.TemporaryPasswords;
+import com.hankkiatti.domain.common.PersonalInfoMasks;
 import com.hankkiatti.domain.common.PhoneNumbers;
 import com.hankkiatti.domain.helper.dto.response.AdminHelperActivityResponseDto;
 import com.hankkiatti.domain.helper.dto.response.AdminHelperDetailResponseDto;
@@ -74,7 +75,7 @@ public class AdminHelperService {
     private final Clock clock;
 
     /**
-     * 목록 — 이름·학번 검색, 계정 상태·아띠 소속 필터, 가입 최근순 20명씩. 전화번호는 가린다 (전체 번호는 상세에서).
+     * 목록 — 이름·학번 검색, 계정 상태·아띠 소속 필터, 가입 최근순 20명씩. 이메일·전화번호·카톡 ID는 가린다 (전체는 상세에서).
      */
     @Transactional(readOnly = true)
     public AdminHelpersResponseDto getHelpers(String q, AccountStatus status, Boolean attiMember, int page) {
@@ -92,8 +93,9 @@ public class AdminHelperService {
 
         List<AdminHelperResponseDto> rows = helpers.stream()
                 .map(helper -> new AdminHelperResponseDto(helper.getAccountId(), helper.getName(),
-                        helper.getStudentNo(), helper.getEmail(), PhoneNumbers.mask(helper.getPhone()),
-                        helper.getKakaoId(), helper.isAttiMember(), helper.getCreatedAt(),
+                        helper.getStudentNo(), PersonalInfoMasks.email(helper.getEmail()),
+                        PhoneNumbers.mask(helper.getPhone()), PersonalInfoMasks.identifier(helper.getKakaoId()),
+                        helper.isAttiMember(), helper.getCreatedAt(),
                         helper.getAccount().getStatus(), completedCounts.getOrDefault(helper.getAccountId(), 0L)))
                 .toList();
         return new AdminHelpersResponseDto(rows, page, PAGE_SIZE, helpers.getTotalElements(), helpers.getTotalPages());

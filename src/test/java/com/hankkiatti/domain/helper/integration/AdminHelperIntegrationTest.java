@@ -174,7 +174,7 @@ class AdminHelperIntegrationTest {
     }
 
     @Test
-    void 목록_제한권한도조회_학번검색_전화번호가림_이용완료건수() throws Exception {
+    void 목록_제한권한도조회_학번검색_연락처가림_이용완료건수() throws Exception {
         // given
         givenActivities();
 
@@ -185,7 +185,11 @@ class AdminHelperIntegrationTest {
                 .andExpect(jsonPath("$.data.totalCount").value(1))
                 .andExpect(jsonPath("$.data.helpers[0].helperId").value(helperIds.get(0)))
                 .andExpect(jsonPath("$.data.helpers[0].maskedPhone").value("010-****-1111"))
+                .andExpect(jsonPath("$.data.helpers[0].maskedEmail").value("ad***********@mju.ac.kr"))
+                .andExpect(jsonPath("$.data.helpers[0].maskedKakaoId").value("ka**********"))
                 .andExpect(jsonPath("$.data.helpers[0].phone").doesNotExist())
+                .andExpect(jsonPath("$.data.helpers[0].email").doesNotExist())
+                .andExpect(jsonPath("$.data.helpers[0].kakaoId").doesNotExist())
                 .andExpect(jsonPath("$.data.helpers[0].status").value("ACTIVE"))
                 .andExpect(jsonPath("$.data.helpers[0].completedCount").value(1));
     }

@@ -100,7 +100,7 @@ domain/{도메인}/
 **도메인 목록**
 ```
 domain/
-├── common/       BaseTimeEntity, LabeledEnum, AbstractEnumConverter, PhoneNumbers, 공통 검증(@PhoneNumber·@KakaoId)
+├── common/       BaseTimeEntity, LabeledEnum, AbstractEnumConverter, PhoneNumbers, PersonalInfoMasks(관리자 목록의 이메일·ID 가림), 공통 검증(@PhoneNumber·@KakaoId)
 ├── account/      Account, AccountRole, AccountStatus
 ├── auth/         RefreshToken, PasswordResetToken, TokenAudience, 로그인·토큰·비밀번호 변경·재설정 API, 관리자가 발급하는 임시 비밀번호 생성(TemporaryPasswords — 장애학생 계정정보·도우미 임시 비밀번호가 같이 씀)
 ├── mail/         MailOutbox, 메일 아웃박스 적재·발송(MailOutboxService, MailRelay)

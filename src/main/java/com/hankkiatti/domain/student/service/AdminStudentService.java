@@ -12,6 +12,7 @@ import com.hankkiatti.domain.auth.exception.AuthErrorType;
 import com.hankkiatti.domain.auth.exception.AuthException;
 import com.hankkiatti.domain.auth.repository.PasswordResetTokenRepository;
 import com.hankkiatti.domain.auth.service.TemporaryPasswords;
+import com.hankkiatti.domain.common.PersonalInfoMasks;
 import com.hankkiatti.domain.common.PhoneNumbers;
 import com.hankkiatti.domain.helprequest.entity.HelpRequest;
 import com.hankkiatti.domain.helprequest.event.HelpRequestCanceledByStudentEvent;
@@ -345,36 +346,11 @@ public class AdminStudentService {
                 student.getName(),
                 student.getStudentNo(),
                 fullAdmin ? student.getDisabilityType() : null,
-                fullAdmin ? maskEmail(student.getSchoolEmail()) : null,
-                fullAdmin ? maskPhone(student.getPhone()) : null,
-                fullAdmin ? maskIdentifier(student.getKakaoId()) : null,
+                fullAdmin ? PersonalInfoMasks.email(student.getSchoolEmail()) : null,
+                fullAdmin ? PhoneNumbers.mask(student.getPhone()) : null,
+                fullAdmin ? PersonalInfoMasks.identifier(student.getKakaoId()) : null,
                 account.getStatus(),
                 recentRequestAt);
-    }
-
-    private static String maskEmail(String email) {
-        int separator = email.indexOf('@');
-        if (separator <= 0) {
-            return maskIdentifier(email);
-        }
-        return maskIdentifier(email.substring(0, separator)) + email.substring(separator);
-    }
-
-    private static String maskPhone(String phone) {
-        int firstSeparator = phone.indexOf('-');
-        int lastSeparator = phone.lastIndexOf('-');
-        if (firstSeparator < 0 || firstSeparator == lastSeparator) {
-            return maskIdentifier(phone);
-        }
-        return phone.substring(0, firstSeparator + 1)
-                + "*".repeat(lastSeparator - firstSeparator - 1)
-                + phone.substring(lastSeparator);
-    }
-
-    private static String maskIdentifier(String value) {
-        int visibleLength = Math.min(2, value.length());
-        int maskedLength = Math.max(3, value.length() - visibleLength);
-        return value.substring(0, visibleLength) + "*".repeat(maskedLength);
     }
 
     private String credentialMailBody(String loginId, String temporaryPassword) {

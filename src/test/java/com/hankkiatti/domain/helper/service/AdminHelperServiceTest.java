@@ -133,8 +133,9 @@ class AdminHelperServiceTest {
     }
 
     @Test
-    void getHelpers_검색어필터페이지_전화번호를가리고이용완료건수를붙인다() {
+    void getHelpers_검색어필터페이지_연락처를가리고이용완료건수를붙인다() {
         // given
+        ReflectionTestUtils.setField(helper, "email", "yunth@mju.ac.kr");
         Helper other = helper(8L, "60230008", "011-123-4567");
         Page<Helper> page = new PageImpl<>(List.of(helper, other), PageRequest.of(1, AdminHelperService.PAGE_SIZE), 22);
         given(helperRepository.searchForAdmin(eq("%윤태%"), eq(AccountStatus.ACTIVE), eq(true),
@@ -148,6 +149,8 @@ class AdminHelperServiceTest {
         // then
         assertThat(result.helpers()).extracting("helperId").containsExactly(HELPER_ID, 8L);
         assertThat(result.helpers()).extracting("maskedPhone").containsExactly("010-****-4444", "011-***-4567");
+        assertThat(result.helpers().get(0).maskedEmail()).isEqualTo("yu***@mju.ac.kr");
+        assertThat(result.helpers().get(0).maskedKakaoId()).isEqualTo("ka**********");
         assertThat(result.helpers()).extracting("completedCount").containsExactly(2L, 0L);
         assertThat(result.helpers().get(0).status()).isEqualTo(AccountStatus.ACTIVE);
         assertThat(result.helpers().get(0).joinedAt()).isEqualTo(NOON.minusDays(30));
