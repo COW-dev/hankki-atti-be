@@ -65,6 +65,8 @@ public interface ApplicationRepository extends JpaRepository<Application, Long> 
 
     /**
      * 신청의 예비를 지원 순으로 잠그고 가져온다 (예비 승격 후보). 신청 행 락 다음에 잡는다.
+     * 지원 순은 ID 순이다. 지원 행은 신청 행 락 안에서 저장돼 ID가 서버 도착 순과 같다 — 지원 시각(appliedAt)은 서버마다
+     * 시계가 조금씩 달라 서버가 여러 대면 순서가 뒤집힐 수 있다.
      */
     default List<Application> findWaitingForUpdate(Long helpRequestId) {
         return findByHelpRequestIdAndStatusForUpdate(helpRequestId, ApplicationStatus.WAITING);
@@ -74,7 +76,7 @@ public interface ApplicationRepository extends JpaRepository<Application, Long> 
     @Query("""
             select a from Application a
             where a.helpRequest.id = :helpRequestId and a.status = :status
-            order by a.appliedAt, a.id""")
+            order by a.id""")
     List<Application> findByHelpRequestIdAndStatusForUpdate(@Param("helpRequestId") Long helpRequestId,
                                                             @Param("status") ApplicationStatus status);
 
@@ -141,7 +143,7 @@ public interface ApplicationRepository extends JpaRepository<Application, Long> 
     @Query("""
             select a from Application a
             where a.helpRequest.id in :helpRequestIds and a.status = :status
-            order by a.helpRequest.id, a.appliedAt, a.id""")
+            order by a.helpRequest.id, a.id""")
     List<Application> findByHelpRequestIdInAndStatusInApplyOrder(
             @Param("helpRequestIds") Collection<Long> helpRequestIds,
             @Param("status") ApplicationStatus status);

@@ -3,6 +3,8 @@ package com.hankkiatti.domain.helper.repository;
 import com.hankkiatti.domain.account.entity.AccountStatus;
 import com.hankkiatti.domain.helper.entity.Helper;
 import jakarta.persistence.LockModeType;
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -43,4 +45,11 @@ public interface HelperRepository extends JpaRepository<Helper, Long> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select h from Helper h where h.accountId = :accountId")
     Optional<Helper> findByIdForUpdate(@Param("accountId") Long accountId);
+
+    /**
+     * 도우미 여러 명의 행을 계정 ID 순으로 한 번에 잠근다 (예비 승격 후보). 여러 행을 잠글 때 순서가 트랜잭션마다 다르면 교착이 생긴다.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select h from Helper h where h.accountId in :accountIds order by h.accountId")
+    List<Helper> findAllByIdForUpdate(@Param("accountIds") Collection<Long> accountIds);
 }

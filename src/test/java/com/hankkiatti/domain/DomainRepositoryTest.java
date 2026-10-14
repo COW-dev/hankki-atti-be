@@ -218,6 +218,48 @@ class DomainRepositoryTest {
     }
 
     @Test
+    void 예비조회_지원시각이아니라ID순_승격후보와순번계산이같은순서() {
+        // given — 먼저 저장된(먼저 도착한) 지원의 지원 시각이 서버 시계 차이로 더 늦게 찍혔다
+        Student student = saveStudent();
+        Helper firstArrived = saveHelper();
+        Account otherAccount = saveAccount("helper2@mju.ac.kr", AccountRole.HELPER);
+        Helper secondArrived = helperRepository.save(new Helper(otherAccount, "박도우미", "60205679",
+                "helper2@mju.ac.kr", "010-2222-2222", "kakao3", false, NOW));
+        HelpRequest matched = new HelpRequest(student, NOW.plusDays(1), Set.of(HelpType.SERVING), null, null);
+        matched.match(NOW);
+        helpRequestRepository.save(matched);
+        Application first = applicationRepository.save(new Application(matched, firstArrived, NOW.plusSeconds(1)));
+        Application second = applicationRepository.save(new Application(matched, secondArrived, NOW));
+        flushAndClear();
+
+        // when
+        List<Application> forPromotion = applicationRepository.findWaitingForUpdate(matched.getId());
+        List<Application> forOrder = applicationRepository.findWaitingIn(List.of(matched.getId()));
+
+        // then
+        assertThat(forPromotion).extracting(Application::getId).containsExactly(first.getId(), second.getId());
+        assertThat(forOrder).extracting(Application::getId).containsExactly(first.getId(), second.getId());
+    }
+
+    @Test
+    void findAllByIdForUpdate_넘긴순서와관계없이계정ID순() {
+        // given
+        Helper lower = saveHelper();
+        Account otherAccount = saveAccount("helper2@mju.ac.kr", AccountRole.HELPER);
+        Helper higher = helperRepository.save(new Helper(otherAccount, "박도우미", "60205679",
+                "helper2@mju.ac.kr", "010-2222-2222", "kakao3", false, NOW));
+        flushAndClear();
+
+        // when
+        List<Helper> locked = helperRepository.findAllByIdForUpdate(
+                List.of(higher.getAccountId(), lower.getAccountId()));
+
+        // then
+        assertThat(locked).extracting(Helper::getAccountId)
+                .containsExactly(lower.getAccountId(), higher.getAccountId());
+    }
+
+    @Test
     void save_도우미_계정과PK공유() {
         // given
         Helper saved = saveHelper();

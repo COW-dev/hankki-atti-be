@@ -15,6 +15,7 @@ import com.hankkiatti.domain.application.entity.ApplicationAfterAction;
 import com.hankkiatti.domain.application.entity.ApplicationStatus;
 import com.hankkiatti.domain.application.entity.CancelReason;
 import com.hankkiatti.domain.application.event.HelperConfirmedEvent;
+import com.hankkiatti.domain.application.event.WaitingExcludedEvent;
 import com.hankkiatti.domain.application.exception.ApplicationErrorType;
 import com.hankkiatti.domain.application.exception.ApplicationException;
 import com.hankkiatti.domain.application.repository.ApplicationRepository;
@@ -121,7 +122,6 @@ class HelperCancelServiceTest {
     }
 
     private void givenCandidateActive(Helper candidate, Application... active) {
-        given(helperRepository.findByIdForUpdate(candidate.getAccountId())).willReturn(Optional.of(candidate));
         given(applicationRepository.findActiveWithHelpRequestByHelperId(candidate.getAccountId()))
                 .willReturn(List.of(active));
     }
@@ -196,6 +196,9 @@ class HelperCancelServiceTest {
         // 앞 예비가 자동 제외돼 승격 당시 순번은 2번
         assertThat(waitingSecond.getPromotedWaitingOrder()).isEqualTo(2);
         assertThat(mine.getAfterAction()).isEqualTo(ApplicationAfterAction.PROMOTED);
+        verify(eventPublisher).publishEvent(new WaitingExcludedEvent(41L));
+        // 후보 도우미는 확인 전에 한 번에 잠근다 (계정 ID 순 정렬은 쿼리가 한다)
+        verify(helperRepository).findAllByIdForUpdate(List.of(8L, 9L));
     }
 
     @Test
