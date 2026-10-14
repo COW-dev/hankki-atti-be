@@ -37,7 +37,17 @@ public class MailRelay {
         LocalDateTime now = now();
         List<Long> ids = mailOutboxRepository.findDispatchableIds(
                 now, staleBefore(now), mailProperties.outbox().batchSize());
-        ids.forEach(this::dispatch);
+        ids.forEach(this::dispatchSafely);
+    }
+
+    // 한 통이 예상 못 한 예외(발송 뒤 완료 기록 실패 등)로 끝나도 같은 배치의 나머지는 보낸다. 그 통은 선점 만료 뒤 다시 보낸다.
+    // 예외 메시지에는 수신 주소가 들어갈 수 있어 종류만 남긴다
+    private void dispatchSafely(Long outboxId) {
+        try {
+            dispatch(outboxId);
+        } catch (RuntimeException e) {
+            log.error("메일 발송 처리 실패: outboxId={}, exception={}", outboxId, e.getClass().getName());
+        }
     }
 
     /**

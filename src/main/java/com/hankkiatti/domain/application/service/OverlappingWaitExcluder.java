@@ -21,8 +21,16 @@ public class OverlappingWaitExcluder {
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onHelperConfirmed(HelperConfirmedEvent event) {
-        List<Long> targets = exclusionService.findTargets(event.helperId(), event.helpRequestId(),
-                event.startAt(), event.endAt());
+        List<Long> targets;
+        try {
+            targets = exclusionService.findTargets(event.helperId(), event.helpRequestId(),
+                    event.startAt(), event.endAt());
+        } catch (RuntimeException e) {
+            // 매칭은 이미 커밋됐다. 여기서 예외를 내면 성공한 지원·수락 요청이 500으로 돌아간다.
+            // 못 뺀 예비는 승격 후보 확인이 같은 겹침 규칙으로 막는다
+            log.warn("겹치는 예비 조회 실패: helperId={}, helpRequestId={}", event.helperId(), event.helpRequestId(), e);
+            return;
+        }
         for (Long applicationId : targets) {
             try {
                 exclusionService.excludeOne(applicationId, event.helperId());

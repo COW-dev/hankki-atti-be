@@ -25,6 +25,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataAccessResourceFailureException;
 
 @ExtendWith(MockitoExtension.class)
 class SmsRelayTest {
@@ -127,5 +128,24 @@ class SmsRelayTest {
         verify(smsOutboxRepository).findDispatchableIds(NOW, NOW.minusMinutes(5), 20);
         verify(smsOutboxRepository).claim(1L, NOW, NOW.minusMinutes(5));
         verify(smsOutboxRepository).claim(2L, NOW, NOW.minusMinutes(5));
+    }
+
+    @Test
+    void dispatchDue_한통이완료기록에서실패해도_나머지는보낸다() {
+        // given — 1번은 보낸 뒤 완료 기록에서 DB 예외
+        given(smsSender.isConfigured()).willReturn(true);
+        given(smsOutboxRepository.findDispatchableIds(eq(NOW), eq(NOW.minusMinutes(5)), anyInt()))
+                .willReturn(List.of(1L, 2L));
+        given(smsOutboxRepository.claim(anyLong(), eq(NOW), eq(NOW.minusMinutes(5)))).willReturn(true);
+        given(smsOutboxRepository.findById(anyLong())).willReturn(Optional.of(sms()));
+        willThrow(new DataAccessResourceFailureException("db down")).willDoNothing()
+                .given(smsOutboxRecorder).markSent(anyLong(), eq(NOW));
+
+        // when
+        smsRelay.dispatchDue();
+
+        // then
+        verify(smsOutboxRecorder).markSent(2L, NOW);
+        verify(smsOutboxRecorder, never()).markFailed(anyLong(), any(), any());
     }
 }

@@ -77,7 +77,20 @@ class NotificationJobRelayTest {
 
         // when & then — 커밋 직후 업무 요청으로 번지지 않는다
         assertThatCode(() -> relay.process(1L)).doesNotThrowAnyException();
-        verify(dispatcher).markFailed(1L, "db down", NOW);
+        verify(dispatcher).markFailed(1L, "DataAccessResourceFailureException: db down", NOW);
+    }
+
+    @Test
+    void process_메시지없는예외_예외종류를실패기록에남김() {
+        // given — NullPointerException처럼 메시지가 없어도 원인을 알 수 있게
+        given(notificationJobRepository.claim(1L, NOW, NOW.minusMinutes(5))).willReturn(true);
+        willThrow(new NullPointerException()).given(dispatcher).process(1L, NOW);
+
+        // when
+        relay.process(1L);
+
+        // then
+        verify(dispatcher).markFailed(1L, "NullPointerException", NOW);
     }
 
     @Test

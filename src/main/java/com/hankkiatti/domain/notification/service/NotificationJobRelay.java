@@ -46,13 +46,20 @@ public class NotificationJobRelay {
         }
     }
 
+    // 원인을 추적할 수 있게 예외 종류는 로그와 실패 기록에 남긴다. 메시지에는 입력값이 들어갈 수 있어 로그에는 쓰지 않고 실패 기록(DB)에만 둔다
     private void recordFailure(Long jobId, RuntimeException cause) {
+        log.warn("알림 작업 처리 중 예외: jobId={}, exception={}", jobId, cause.getClass().getName());
         try {
-            dispatcher.markFailed(jobId, cause.getMessage(), now());
+            dispatcher.markFailed(jobId, describe(cause), now());
         } catch (RuntimeException e) {
             // 실패 기록도 못 했으면 선점 만료(claimTimeout) 뒤 폴러가 다시 처리한다
             log.error("알림 작업 실패 기록 실패: jobId={}", jobId, e);
         }
+    }
+
+    private static String describe(RuntimeException cause) {
+        String type = cause.getClass().getSimpleName();
+        return cause.getMessage() == null ? type : type + ": " + cause.getMessage();
     }
 
     private LocalDateTime staleBefore(LocalDateTime now) {

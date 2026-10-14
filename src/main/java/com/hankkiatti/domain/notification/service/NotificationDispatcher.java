@@ -51,16 +51,18 @@ public class NotificationDispatcher {
             return;
         }
         Long targetId = job.getTargetId();
-        switch (job.getType()) {
-            case HELPER_CONFIRMED -> helperConfirmed(targetId, HelperConfirmedEvent.Kind.valueOf(job.getDetail()));
-            case PROMOTION_PENDING -> promotionPending(targetId, Boolean.parseBoolean(job.getDetail()));
-            case WAITING_REGISTERED -> waitingRegistered(targetId, Integer.parseInt(job.getDetail()));
-            case WAITING_EXCLUDED -> waitingExcluded(targetId);
-            case REQUEST_REOPENED -> requestReopened(targetId);
-            case REQUEST_FAILED -> requestFailed(targetId);
-            case STUDENT_CANCELED -> studentCanceled(targetId);
-            case NOTICE_PUBLISHED -> noticePublished(targetId);
-        }
+        // switch 식이라 NotificationJobType에 값을 더하고 여기를 빠뜨리면 컴파일이 실패한다 — 알림 없이 완료 처리되지 않게
+        Runnable handler = switch (job.getType()) {
+            case HELPER_CONFIRMED -> () -> helperConfirmed(targetId, HelperConfirmedEvent.Kind.valueOf(job.getDetail()));
+            case PROMOTION_PENDING -> () -> promotionPending(targetId, Boolean.parseBoolean(job.getDetail()));
+            case WAITING_REGISTERED -> () -> waitingRegistered(targetId, Integer.parseInt(job.getDetail()));
+            case WAITING_EXCLUDED -> () -> waitingExcluded(targetId);
+            case REQUEST_REOPENED -> () -> requestReopened(targetId);
+            case REQUEST_FAILED -> () -> requestFailed(targetId);
+            case STUDENT_CANCELED -> () -> studentCanceled(targetId);
+            case NOTICE_PUBLISHED -> () -> noticePublished(targetId);
+        };
+        handler.run();
         job.markDone(now);
     }
 

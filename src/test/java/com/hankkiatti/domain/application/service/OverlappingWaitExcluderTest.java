@@ -1,7 +1,10 @@
 package com.hankkiatti.domain.application.service;
 
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import com.hankkiatti.domain.application.event.HelperConfirmedEvent;
@@ -13,6 +16,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.CannotAcquireLockException;
+import org.springframework.jdbc.CannotGetJdbcConnectionException;
 
 @ExtendWith(MockitoExtension.class)
 class OverlappingWaitExcluderTest {
@@ -39,5 +43,18 @@ class OverlappingWaitExcluderTest {
         verify(exclusionService).excludeOne(41L, 7L);
         verify(exclusionService).excludeOne(42L, 7L);
         verify(exclusionService).excludeOne(43L, 7L);
+    }
+
+    @Test
+    void onHelperConfirmed_대상조회가실패해도_예외를밖으로내지않는다() {
+        // given — 커넥션 부족 등. 매칭은 이미 커밋돼 지원 요청은 성공으로 끝나야 한다
+        given(exclusionService.findTargets(7L, 10L, NOON, NOON.plusHours(1)))
+                .willThrow(new CannotGetJdbcConnectionException("pool exhausted"));
+
+        // when & then
+        assertThatCode(() -> excluder.onHelperConfirmed(new HelperConfirmedEvent(7L, 10L, 31L, NOON,
+                NOON.plusHours(1), HelperConfirmedEvent.Kind.DIRECT_MATCH)))
+                .doesNotThrowAnyException();
+        verify(exclusionService, never()).excludeOne(anyLong(), anyLong());
     }
 }
