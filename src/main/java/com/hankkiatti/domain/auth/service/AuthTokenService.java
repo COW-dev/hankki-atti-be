@@ -48,6 +48,8 @@ public class AuthTokenService {
     /**
      * refresh 토큰을 새 토큰 한 쌍으로 바꾼다. 쓴 토큰은 폐기한다.
      * 이미 폐기된 토큰이 다시 오면 탈취로 보고 그 계정의 refresh 토큰을 모두 폐기한다 — 예외가 나도 이 폐기는 커밋한다.
+     * 만료·버전 불일치(비밀번호 변경·비활성화)는 재사용 판정보다 먼저 본다. 비밀번호를 바꾸면 다른 기기의 토큰도 폐기되는데,
+     * 그 기기가 옛 토큰으로 refresh할 때 재사용으로 판정하면 비밀번호를 바꾼 기기가 막 받은 새 토큰까지 폐기된다.
      */
     @Transactional(noRollbackFor = AuthException.class)
     public IssuedTokens rotate(String rawRefreshToken, TokenAudience audience, LocalDateTime now) {
@@ -55,16 +57,16 @@ public class AuthTokenService {
                 .orElseThrow(() -> new AuthException(AuthErrorType.INVALID_REFRESH_TOKEN));
 
         Account account = token.getAccount();
-        if (token.isRevoked()) {
-            refreshTokenRepository.revokeAllByAccountId(account.getId(), now);
-            throw new AuthException(AuthErrorType.INVALID_REFRESH_TOKEN, "재사용된 refresh 토큰, accountId=" + account.getId());
-        }
         if (token.isExpired(now)
                 || token.getAudience() != audience
                 || !account.isActive()
                 || token.getTokenVersion() != account.getTokenVersion()
                 || !audience.allows(account.getRole())) {
             throw new AuthException(AuthErrorType.INVALID_REFRESH_TOKEN, "accountId=" + account.getId());
+        }
+        if (token.isRevoked()) {
+            refreshTokenRepository.revokeAllByAccountId(account.getId(), now);
+            throw new AuthException(AuthErrorType.INVALID_REFRESH_TOKEN, "재사용된 refresh 토큰, accountId=" + account.getId());
         }
 
         token.revoke(now);

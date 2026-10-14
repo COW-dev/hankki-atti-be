@@ -172,6 +172,28 @@ class AuthIntegrationTest {
     }
 
     @Test
+    void 비밀번호변경_다른기기의옛refresh는401이고바꾼기기의새refresh는유지() throws Exception {
+        // given — 같은 계정으로 두 기기에서 로그인
+        saveAccount("60231234", AccountRole.STUDENT, false);
+        MockHttpServletResponse deviceA = login("/api/auth/login", "60231234", PASSWORD);
+        Cookie deviceBCookie = login("/api/auth/login", "60231234", PASSWORD).getCookie(USER_COOKIE);
+
+        // when — 기기 A에서 비밀번호 변경
+        MockHttpServletResponse changeResponse = mockMvc.perform(patch("/api/auth/password")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(accessTokenOf(deviceA)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"currentPassword\":\"" + PASSWORD + "\",\"newPassword\":\"newPass!2026\"}"))
+                .andReturn().getResponse();
+        assertThat(changeResponse.getStatus()).isEqualTo(200);
+
+        // then — 기기 B는 로그아웃되고, 그 시도가 기기 A의 새 토큰을 폐기하지 않는다
+        mockMvc.perform(post("/api/auth/refresh").cookie(deviceBCookie))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/auth/refresh").cookie(changeResponse.getCookie(USER_COOKIE)))
+                .andExpect(status().isOk());
+    }
+
+    @Test
     void 비밀번호변경_규칙위반_422() throws Exception {
         // given
         saveAccount("60231234", AccountRole.STUDENT, true);

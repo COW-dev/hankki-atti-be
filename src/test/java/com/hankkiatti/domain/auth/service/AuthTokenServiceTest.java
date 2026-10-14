@@ -3,6 +3,7 @@ package com.hankkiatti.domain.auth.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
@@ -148,6 +149,22 @@ class AuthTokenServiceTest {
         // when & then
         assertThatThrownBy(() -> authTokenService.rotate(RAW_TOKEN, TokenAudience.USER, NOW))
                 .isInstanceOf(AuthException.class);
+    }
+
+    @Test
+    void rotate_비밀번호변경으로폐기된다른기기의토큰_재사용으로보지않고새토큰은유지() {
+        // given — 비밀번호 변경: 버전이 오르고 모든 기기의 토큰이 폐기됐다
+        Account account = student();
+        RefreshToken otherDevice = storedToken(account, TokenAudience.USER, 0, NOW.plusDays(1));
+        account.changePassword("new-hash");
+        otherDevice.revoke(NOW.minusMinutes(1));
+        given(refreshTokenRepository.findByTokenHash(anyString())).willReturn(Optional.of(otherDevice));
+
+        // when & then
+        assertThatThrownBy(() -> authTokenService.rotate(RAW_TOKEN, TokenAudience.USER, NOW))
+                .isInstanceOf(AuthException.class)
+                .extracting("errorCode").isEqualTo(AuthErrorType.INVALID_REFRESH_TOKEN);
+        verify(refreshTokenRepository, never()).revokeAllByAccountId(anyLong(), any());
     }
 
     @Test
