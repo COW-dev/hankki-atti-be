@@ -16,12 +16,18 @@ import com.hankkiatti.domain.application.exception.ApplicationErrorType;
 import com.hankkiatti.domain.application.exception.ApplicationException;
 import com.hankkiatti.domain.application.repository.ApplicationRepository;
 import com.hankkiatti.domain.application.service.ApplicationService;
+import com.hankkiatti.domain.auth.exception.AuthErrorType;
+import com.hankkiatti.domain.auth.exception.AuthException;
 import com.hankkiatti.domain.helper.entity.Helper;
 import com.hankkiatti.domain.helper.repository.HelperRepository;
+import com.hankkiatti.domain.helprequest.dto.request.HelpRequestCreateRequestDto;
+import com.hankkiatti.domain.helprequest.dto.response.HelpRequestCreateResponseDto;
 import com.hankkiatti.domain.helprequest.entity.HelpRequest;
 import com.hankkiatti.domain.helprequest.entity.HelpRequestStatus;
 import com.hankkiatti.domain.helprequest.entity.HelpType;
 import com.hankkiatti.domain.helprequest.repository.HelpRequestRepository;
+import com.hankkiatti.domain.helprequest.service.HelpRequestSchedule;
+import com.hankkiatti.domain.helprequest.service.HelpRequestService;
 import com.hankkiatti.domain.mail.repository.MailOutboxRepository;
 import com.hankkiatti.domain.notification.entity.NotificationJob;
 import com.hankkiatti.domain.notification.entity.NotificationJobType;
@@ -35,6 +41,7 @@ import com.hankkiatti.domain.student.service.AdminStudentService;
 import com.hankkiatti.support.TestProfiles;
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
@@ -58,6 +65,12 @@ class AdminStudentDeactivationConcurrencyTest {
 
     @Autowired
     private ApplicationService applicationService;
+
+    @Autowired
+    private HelpRequestService helpRequestService;
+
+    @Autowired
+    private HelpRequestSchedule helpRequestSchedule;
 
     @Autowired
     private AccountRepository accountRepository;
@@ -159,6 +172,35 @@ class AdminStudentDeactivationConcurrencyTest {
         assertThat(applicationRepository.findAll())
                 .allSatisfy(application -> assertThat(application.getStatus())
                         .isEqualTo(ApplicationStatus.STUDENT_CANCELED));
+    }
+
+    @Test
+    void deactivate_동시신청생성_비활성계정의진행중신청이남지않는다() throws Exception {
+        // given — setUp의 내일 점심 신청과 겹치지 않는 저녁 시각
+        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime bookableDinner = helpRequestSchedule.bookableStartTimes(now).stream()
+                .filter(startAt -> startAt.toLocalDate().isAfter(now.toLocalDate())
+                        && startAt.toLocalTime().equals(LocalTime.of(17, 0)))
+                .findFirst()
+                .orElseThrow();
+        List<Callable<Object>> tasks = List.of(
+                () -> adminStudentService.deactivate(adminId, studentId),
+                () -> helpRequestService.create(studentId,
+                        new HelpRequestCreateRequestDto(bookableDinner, Set.of(HelpType.SERVING), null, null)));
+
+        // when
+        List<Object> results = runConcurrently(tasks);
+
+        // then — 신청이 먼저 잠그면 비활성화가 그 신청까지 취소하고, 비활성화가 먼저면 신청이 막힌다
+        assertThat(results).filteredOn(AdminStudentAccountStatusResponseDto.class::isInstance).hasSize(1);
+        assertThat(results).allMatch(result -> result instanceof AdminStudentAccountStatusResponseDto
+                || result instanceof HelpRequestCreateResponseDto
+                || result instanceof AuthException);
+        results.stream().filter(AuthException.class::isInstance)
+                .map(AuthException.class::cast)
+                .forEach(exception -> assertThat(exception.getErrorCode()).isEqualTo(AuthErrorType.ACCOUNT_DEACTIVATED));
+        assertThat(helpRequestRepository.findAll())
+                .noneMatch(request -> request.getStatus().isInProgress());
     }
 
     @Test

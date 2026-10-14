@@ -47,6 +47,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
@@ -137,7 +138,11 @@ public class AdminStudentService {
                 studentAccountId, !student.getAccount().isActive(), activeRequestCount);
     }
 
-    @Transactional
+    /**
+     * 권한 확인(관리자 조회)이 잠금보다 먼저라 READ_COMMITTED로 둔다. REPEATABLE READ면 첫 조회 때 스냅샷이 잡혀,
+     * 잠금을 기다리는 사이 이 장애학생이 새로 커밋한 신청을 취소 대상 조회에서 못 본다.
+     */
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public AdminStudentAccountStatusResponseDto deactivate(Long adminAccountId, Long studentAccountId) {
         requireFullAdmin(adminAccountId);
         Account account = findStudentAccountForUpdate(studentAccountId);

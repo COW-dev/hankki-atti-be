@@ -24,6 +24,7 @@ import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -62,6 +63,10 @@ public class HelpRequestService {
         // MySQL(REPEATABLE READ)에서도 먼저 커밋된 신청까지 보고 겹침을 판단한다
         Student student = studentRepository.findByIdForUpdate(accountId)
                 .orElseThrow(() -> new AuthException(AuthErrorType.ACCESS_DENIED, "장애학생 전용, accountId=" + accountId));
+        // 관리자 비활성화가 이 행을 먼저 잠그고 커밋했으면 여기서 막는다 — 비활성 계정의 모집 중 신청이 남지 않게
+        if (!student.getAccount().isActive()) {
+            throw new AuthException(AuthErrorType.ACCOUNT_DEACTIVATED, "accountId=" + accountId);
+        }
 
         LocalDateTime endAt = startAt.plusHours(HelpRequest.USAGE_HOURS);
         if (helpRequestRepository.existsOverlapping(accountId, startAt, endAt)) {
@@ -167,11 +172,13 @@ public class HelpRequestService {
         return toMyRequest(request, null, now);
     }
 
-    // 장애학생 본인의 신청을 신청 행 락으로 가져온다. 없는 신청과 남의 신청은 같은 404로 응답한다
+    // 장애학생 본인의 신청을 신청 행 락으로 가져온다. 없는 신청과 남의 신청은 같은 404로 응답한다.
+    // 잠금을 트랜잭션의 첫 쿼리로 둔다 — 뒤따르는 조회가 먼저 커밋된 스케줄러 처리(이용 완료 등)까지 보게
     private HelpRequest findMyRequestForUpdate(Long accountId, Long helpRequestId) {
+        Optional<HelpRequest> found = helpRequestRepository.findByIdForUpdate(helpRequestId);
         requireStudent(accountId);
-        return helpRequestRepository.findByIdForUpdate(helpRequestId)
-                .filter(found -> found.isRequestedBy(accountId))
+        return found
+                .filter(request -> request.isRequestedBy(accountId))
                 .orElseThrow(() -> new HelpRequestException(HelpRequestErrorType.NOT_FOUND,
                         "helpRequestId=" + helpRequestId + ", accountId=" + accountId));
     }

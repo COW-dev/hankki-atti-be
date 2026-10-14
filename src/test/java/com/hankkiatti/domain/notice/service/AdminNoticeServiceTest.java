@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -37,6 +38,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
@@ -108,9 +110,12 @@ class AdminNoticeServiceTest {
         // when
         AdminNoticeDetailResponseDto result = service.create(ADMIN_ID, request("  10월 학식당 운영 시간 안내  ", null));
 
-        // then
-        verify(accountRepository).findByIdForUpdate(ADMIN_ID);
-        verify(noticeRepository).countRecentByAuthorAndTitle(ADMIN_ID, "10월 학식당 운영 시간 안내", NOW.minusSeconds(10));
+        // then — 계정 잠금이 트랜잭션의 첫 쿼리여야 중복 확인이 먼저 커밋된 공지까지 본다 (MySQL REPEATABLE READ)
+        InOrder queryOrder = inOrder(accountRepository, adminRepository, noticeRepository);
+        queryOrder.verify(accountRepository).findByIdForUpdate(ADMIN_ID);
+        queryOrder.verify(adminRepository).findById(ADMIN_ID);
+        queryOrder.verify(noticeRepository)
+                .countRecentByAuthorAndTitle(ADMIN_ID, "10월 학식당 운영 시간 안내", NOW.minusSeconds(10));
         verify(eventPublisher).publishEvent(new NoticePublishedEvent(NOTICE_ID));
         assertThat(result.noticeId()).isEqualTo(NOTICE_ID);
         assertThat(result.title()).isEqualTo("10월 학식당 운영 시간 안내");
@@ -152,7 +157,7 @@ class AdminNoticeServiceTest {
     }
 
     @Test
-    void create_제한권한_ACCESS_DENIED_잠그지도않음() {
+    void create_제한권한_ACCESS_DENIED_저장안함() {
         // given
         given(adminRepository.findById(ADMIN_ID)).willReturn(Optional.of(admin(AdminGrade.LIMITED)));
 
@@ -160,7 +165,7 @@ class AdminNoticeServiceTest {
         assertThatThrownBy(() -> service.create(ADMIN_ID, request("공지", false)))
                 .isInstanceOf(AuthException.class)
                 .extracting("errorCode").isEqualTo(AuthErrorType.ACCESS_DENIED);
-        verify(accountRepository, never()).findByIdForUpdate(anyLong());
+        verify(noticeRepository, never()).countRecentByAuthorAndTitle(anyLong(), anyString(), any());
         verify(noticeRepository, never()).save(any());
     }
 
