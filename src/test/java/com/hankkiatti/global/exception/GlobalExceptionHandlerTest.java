@@ -29,6 +29,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
+import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -181,11 +182,29 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
-    void handleIllegalArgument_IllegalArgumentException_내부메시지숨기고400반환() throws Exception {
-        // when & then
+    void handleException_IllegalArgumentException_서버오류로보고내부메시지숨기고500반환() throws Exception {
+        // when & then — 앱 코드는 IllegalArgumentException을 던지지 않으므로 여기 오는 것은 내부 버그다
         mockMvc.perform(get("/test/illegal"))
-                .andExpect(status().isBadRequest())
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.code").value("COMMON_INTERNAL_ERROR"))
                 .andExpect(content().string(not(containsString("internal-detail"))));
+    }
+
+    @Test
+    void handleUnsupportedMediaType_JSON이아닌본문_415반환() throws Exception {
+        // when & then
+        mockMvc.perform(post("/test/items").contentType(MediaType.TEXT_PLAIN).content("name"))
+                .andExpect(status().isUnsupportedMediaType())
+                .andExpect(jsonPath("$.code").value("COMMON_UNSUPPORTED_MEDIA_TYPE"));
+    }
+
+    @Test
+    void handleLockFailure_락대기시간초과_409와재시도안내코드반환() throws Exception {
+        // when & then
+        mockMvc.perform(get("/test/lock-timeout"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("COMMON_LOCK_CONFLICT"))
+                .andExpect(content().string(not(containsString("select"))));
     }
 
     @Test
@@ -219,6 +238,14 @@ class GlobalExceptionHandlerTest {
         // then
         assertThat(output.getOut()).contains("constraint=accounts.UK_login_id", "errorCode=1062");
         assertThat(output.getOut()).doesNotContain("leak@mju.ac.kr");
+    }
+
+    @Test
+    void handleDataIntegrityViolation_NOT_NULL위반_서버값오류로500반환() throws Exception {
+        // when & then
+        mockMvc.perform(get("/test/integrity-not-null"))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.code").value("COMMON_INTERNAL_ERROR"));
     }
 
     @Test
@@ -364,6 +391,20 @@ class GlobalExceptionHandlerTest {
                     new org.hibernate.exception.ConstraintViolationException(message,
                             new SQLException(message, "23000", 1062), "insert into accounts ...",
                             "accounts.UK_login_id"));
+        }
+
+        @GetMapping("/test/integrity-not-null")
+        void integrityNotNull() {
+            String message = "Column 'name' cannot be null";
+            throw new DataIntegrityViolationException("could not execute statement [" + message + "]",
+                    new org.hibernate.exception.ConstraintViolationException(message,
+                            new SQLException(message, "23000", 1048), "insert into helpers ...",
+                            org.hibernate.exception.ConstraintViolationException.ConstraintKind.NOT_NULL, "name"));
+        }
+
+        @GetMapping("/test/lock-timeout")
+        void lockTimeout() {
+            throw new CannotAcquireLockException("could not execute statement [select ... for update]");
         }
 
         @GetMapping("/test/unexpected")

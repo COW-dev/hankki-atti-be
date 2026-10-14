@@ -7,7 +7,9 @@ import jakarta.validation.ConstraintViolationException;
 import java.sql.SQLException;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
+import org.hibernate.exception.ConstraintViolationException.ConstraintKind;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -15,6 +17,7 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.BindException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.HttpMediaTypeNotAcceptableException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -84,13 +87,6 @@ public class GlobalExceptionHandler {
         return json(CommonErrorType.INVALID_REQUEST, CommonErrorType.INVALID_REQUEST.getMessage());
     }
 
-    @ExceptionHandler(IllegalArgumentException.class)
-    public ResponseEntity<ApiResult<?>> handleIllegalArgument(IllegalArgumentException exception) {
-        // 예외 메시지에 내부 구현 정보가 담길 수 있으므로 로그에만 남긴다.
-        log.warn("잘못된 인자값: {}", exception.getMessage(), exception);
-        return json(CommonErrorType.INVALID_REQUEST, CommonErrorType.INVALID_REQUEST.getMessage());
-    }
-
     @ExceptionHandler(ResponseStatusException.class)
     public ResponseEntity<ApiResult<?>> handleResponseStatus(ResponseStatusException exception) {
         CommonErrorType errorType = mapStatusToErrorType(exception.getStatusCode());
@@ -100,18 +96,38 @@ public class GlobalExceptionHandler {
         return json(errorType, message);
     }
 
-    // DB 메시지에는 위반한 값이 그대로 들어가므로(예: Duplicate entry 'x@mju.ac.kr') 어느 제약인지만 남긴다
+    // DB 메시지에는 위반한 값이 그대로 들어가므로(예: Duplicate entry 'x@mju.ac.kr') 어느 제약인지만 남긴다.
+    // NOT NULL·CHECK 위반은 요청과 상태가 충돌한 게 아니라 서버가 값을 잘못 채운 것이라 500으로 둔다
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ApiResult<?>> handleDataIntegrityViolation(DataIntegrityViolationException exception) {
         org.hibernate.exception.ConstraintViolationException violation =
                 findCause(exception, org.hibernate.exception.ConstraintViolationException.class);
         SQLException sqlException = findCause(exception, SQLException.class);
+        ConstraintKind kind = violation == null ? null : violation.getKind();
+        String constraint = violation == null ? null : violation.getConstraintName();
+        String sqlState = sqlException == null ? null : sqlException.getSQLState();
+        Integer errorCode = sqlException == null ? null : sqlException.getErrorCode();
+        if (kind == ConstraintKind.NOT_NULL || kind == ConstraintKind.CHECK) {
+            log.error("데이터 무결성 위반(서버 값 오류): constraint={}, kind={}, sqlState={}, errorCode={}",
+                    constraint, kind, sqlState, errorCode);
+            return json(CommonErrorType.INTERNAL_ERROR, CommonErrorType.INTERNAL_ERROR.getMessage());
+        }
         log.warn("데이터 무결성 위반: constraint={}, kind={}, sqlState={}, errorCode={}",
-                violation == null ? null : violation.getConstraintName(),
-                violation == null ? null : violation.getKind(),
-                sqlException == null ? null : sqlException.getSQLState(),
-                sqlException == null ? null : sqlException.getErrorCode());
+                constraint, kind, sqlState, errorCode);
         return json(CommonErrorType.CONFLICT, CommonErrorType.CONFLICT.getMessage());
+    }
+
+    // 락 대기 시간 초과·교착으로 롤백된 요청. 다시 보내면 대개 성공하므로 전용 코드로 재시도를 안내한다
+    @ExceptionHandler(PessimisticLockingFailureException.class)
+    public ResponseEntity<ApiResult<?>> handleLockFailure(PessimisticLockingFailureException exception) {
+        log.warn("락 획득 실패: exception={}", exception.getClass().getSimpleName());
+        return json(CommonErrorType.LOCK_CONFLICT, CommonErrorType.LOCK_CONFLICT.getMessage());
+    }
+
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    public ResponseEntity<ApiResult<?>> handleUnsupportedMediaType(HttpMediaTypeNotSupportedException exception) {
+        log.debug("지원하지 않는 Content-Type: {}", exception.getContentType());
+        return json(CommonErrorType.UNSUPPORTED_MEDIA_TYPE, CommonErrorType.UNSUPPORTED_MEDIA_TYPE.getMessage());
     }
 
     @ExceptionHandler(HttpMediaTypeNotAcceptableException.class)
