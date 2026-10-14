@@ -173,7 +173,7 @@ class DomainRepositoryTest {
     }
 
     @Test
-    void 계정비활성화대상조회_진행중신청과활성지원만조회() {
+    void 계정비활성화대상조회_식사시작전진행중신청과활성지원만조회() {
         // given
         Student student = saveStudent();
         Helper helper = saveHelper();
@@ -187,6 +187,11 @@ class DomainRepositoryTest {
                 student, NOW.plusDays(3), Set.of(HelpType.MOVING), null, null);
         canceled.withdraw(NOW);
         helpRequestRepository.save(canceled);
+        // 식사가 이미 시작된 매칭 건은 취소 대상이 아니다 — 스케줄러가 이용 완료로 처리한다
+        HelpRequest started = new HelpRequest(
+                student, NOW.minusMinutes(20), Set.of(HelpType.SERVING), null, null);
+        started.match(NOW.minusDays(1));
+        helpRequestRepository.save(started);
 
         Application matchedApplication = new Application(matched, helper, NOW);
         matchedApplication.match(NOW);
@@ -200,8 +205,9 @@ class DomainRepositoryTest {
         flushAndClear();
 
         // when
-        List<Long> requestIds = helpRequestRepository.findActiveIdsByStudentAccountId(student.getAccountId());
-        long requestCount = helpRequestRepository.countActiveByStudentAccountId(student.getAccountId());
+        List<Long> requestIds =
+                helpRequestRepository.findActiveIdsBeforeMealByStudentAccountId(student.getAccountId(), NOW);
+        long requestCount = helpRequestRepository.countActiveBeforeMealByStudentAccountId(student.getAccountId(), NOW);
         List<Application> applications = applicationRepository.findActiveForUpdate(matched.getId());
 
         // then
@@ -209,6 +215,48 @@ class DomainRepositoryTest {
         assertThat(requestCount).isEqualTo(2);
         assertThat(applications).extracting(Application::getId)
                 .containsExactly(matchedApplication.getId(), waitingApplication.getId());
+    }
+
+    @Test
+    void 예비조회_지원시각이아니라ID순_승격후보와순번계산이같은순서() {
+        // given — 먼저 저장된(먼저 도착한) 지원의 지원 시각이 서버 시계 차이로 더 늦게 찍혔다
+        Student student = saveStudent();
+        Helper firstArrived = saveHelper();
+        Account otherAccount = saveAccount("helper2@mju.ac.kr", AccountRole.HELPER);
+        Helper secondArrived = helperRepository.save(new Helper(otherAccount, "박도우미", "60205679",
+                "helper2@mju.ac.kr", "010-2222-2222", "kakao3", false, NOW));
+        HelpRequest matched = new HelpRequest(student, NOW.plusDays(1), Set.of(HelpType.SERVING), null, null);
+        matched.match(NOW);
+        helpRequestRepository.save(matched);
+        Application first = applicationRepository.save(new Application(matched, firstArrived, NOW.plusSeconds(1)));
+        Application second = applicationRepository.save(new Application(matched, secondArrived, NOW));
+        flushAndClear();
+
+        // when
+        List<Application> forPromotion = applicationRepository.findWaitingForUpdate(matched.getId());
+        List<Application> forOrder = applicationRepository.findWaitingIn(List.of(matched.getId()));
+
+        // then
+        assertThat(forPromotion).extracting(Application::getId).containsExactly(first.getId(), second.getId());
+        assertThat(forOrder).extracting(Application::getId).containsExactly(first.getId(), second.getId());
+    }
+
+    @Test
+    void findAllByIdForUpdate_넘긴순서와관계없이계정ID순() {
+        // given
+        Helper lower = saveHelper();
+        Account otherAccount = saveAccount("helper2@mju.ac.kr", AccountRole.HELPER);
+        Helper higher = helperRepository.save(new Helper(otherAccount, "박도우미", "60205679",
+                "helper2@mju.ac.kr", "010-2222-2222", "kakao3", false, NOW));
+        flushAndClear();
+
+        // when
+        List<Helper> locked = helperRepository.findAllByIdForUpdate(
+                List.of(higher.getAccountId(), lower.getAccountId()));
+
+        // then
+        assertThat(locked).extracting(Helper::getAccountId)
+                .containsExactly(lower.getAccountId(), higher.getAccountId());
     }
 
     @Test

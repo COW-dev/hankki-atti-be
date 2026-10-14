@@ -39,8 +39,9 @@ public class HelpRequestController implements HelpRequestControllerDocs {
 
     @Override
     @GetMapping("/time-options")
-    public ResponseEntity<ApiResult<List<TimeOptionDateResponseDto>>> getTimeOptions() {
-        return ApiResponse.of(SuccessType.SUCCESS, timeOptionService.getTimeOptions());
+    public ResponseEntity<ApiResult<List<TimeOptionDateResponseDto>>> getTimeOptions(
+            @AuthenticationPrincipal AuthPrincipal principal) {
+        return ApiResponse.of(SuccessType.SUCCESS, timeOptionService.getTimeOptions(principal.accountId()));
     }
 
     @Override

@@ -183,7 +183,7 @@ class NotificationJobIntegrationTest {
             NotificationJob failed = onlyJob();
             assertThat(failed.getStatus()).isEqualTo(NotificationJobStatus.PENDING);
             assertThat(failed.getAttempts()).isEqualTo(1);
-            assertThat(failed.getLastError()).isEqualTo("db down");
+            assertThat(failed.getLastError()).isEqualTo("DataAccessResourceFailureException: db down");
             assertThat(notificationTypes()).isEmpty();
             assertThat(mailOutboxRepository.count()).isZero();
         });

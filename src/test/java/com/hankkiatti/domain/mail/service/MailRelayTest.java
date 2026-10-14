@@ -25,6 +25,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.mail.MailSendException;
 
 @ExtendWith(MockitoExtension.class)
@@ -128,5 +129,24 @@ class MailRelayTest {
         verify(mailOutboxRepository).findDispatchableIds(NOW, NOW.minusMinutes(5), 20);
         verify(mailOutboxRepository).claim(1L, NOW, NOW.minusMinutes(5));
         verify(mailOutboxRepository).claim(2L, NOW, NOW.minusMinutes(5));
+    }
+
+    @Test
+    void dispatchDue_한통이완료기록에서실패해도_나머지는보낸다() {
+        // given — 1번은 보낸 뒤 완료 기록에서 DB 예외
+        given(smtpMailClient.isConfigured()).willReturn(true);
+        given(mailOutboxRepository.findDispatchableIds(eq(NOW), eq(NOW.minusMinutes(5)), anyInt()))
+                .willReturn(List.of(1L, 2L));
+        given(mailOutboxRepository.claim(anyLong(), eq(NOW), eq(NOW.minusMinutes(5)))).willReturn(true);
+        given(mailOutboxRepository.findById(anyLong())).willReturn(Optional.of(mail()));
+        willThrow(new DataAccessResourceFailureException("db down")).willDoNothing()
+                .given(mailOutboxRecorder).markSent(anyLong(), eq(NOW));
+
+        // when
+        mailRelay.dispatchDue();
+
+        // then
+        verify(mailOutboxRecorder).markSent(2L, NOW);
+        verify(mailOutboxRecorder, never()).markFailed(anyLong(), any(), any());
     }
 }

@@ -3,12 +3,16 @@ package com.hankkiatti.domain.helprequest.integration;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.hankkiatti.domain.account.entity.Account;
 import com.hankkiatti.domain.account.entity.AccountRole;
 import com.hankkiatti.domain.account.repository.AccountRepository;
+import com.hankkiatti.domain.helper.repository.HelperRepository;
 import com.hankkiatti.domain.helprequest.service.HelpRequestSchedule;
+import com.hankkiatti.domain.student.repository.StudentRepository;
+import com.hankkiatti.support.TestProfiles;
 import com.jayway.jsonpath.JsonPath;
 import java.time.Clock;
 import java.time.DayOfWeek;
@@ -44,6 +48,12 @@ class HelpRequestTimeOptionIntegrationTest {
     private AccountRepository accountRepository;
 
     @Autowired
+    private StudentRepository studentRepository;
+
+    @Autowired
+    private HelperRepository helperRepository;
+
+    @Autowired
     private PasswordEncoder passwordEncoder;
 
     @Autowired
@@ -53,7 +63,13 @@ class HelpRequestTimeOptionIntegrationTest {
     private Clock clock;
 
     private String loginBearer(String loginId) throws Exception {
-        accountRepository.save(new Account(loginId, passwordEncoder.encode(PASSWORD), AccountRole.STUDENT, false, false));
+        Account account = accountRepository.save(
+                new Account(loginId, passwordEncoder.encode(PASSWORD), AccountRole.STUDENT, false, false));
+        studentRepository.save(TestProfiles.student(account));
+        return bearerOf(loginId);
+    }
+
+    private String bearerOf(String loginId) throws Exception {
         String body = mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"loginId\":\"" + loginId + "\",\"password\":\"" + PASSWORD + "\"}"))
@@ -92,5 +108,18 @@ class HelpRequestTimeOptionIntegrationTest {
     void 토큰없이조회_401() throws Exception {
         // when & then
         mockMvc.perform(get(TIME_OPTIONS)).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void 도우미계정으로조회_403() throws Exception {
+        // given
+        Account account = accountRepository.save(new Account("time-helper@mju.ac.kr",
+                passwordEncoder.encode(PASSWORD), AccountRole.HELPER, false, false));
+        helperRepository.save(TestProfiles.helper(account, "60239001"));
+
+        // when & then
+        mockMvc.perform(get(TIME_OPTIONS).header(HttpHeaders.AUTHORIZATION, bearerOf("time-helper@mju.ac.kr")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("AUTH_ACCESS_DENIED"));
     }
 }

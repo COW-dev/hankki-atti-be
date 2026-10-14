@@ -5,10 +5,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
+import com.hankkiatti.domain.account.entity.Account;
 import com.hankkiatti.domain.account.entity.AccountRole;
 import com.hankkiatti.domain.application.entity.Application;
 import com.hankkiatti.domain.application.entity.ApplicationStatus;
@@ -43,6 +45,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
@@ -159,6 +162,22 @@ class HelpRequestServiceTest {
         // when & then
         assertErrorType(() -> helpRequestService.create(STUDENT_ID, request(NOON, Set.of(HelpType.SERVING), null, null)),
                 HelpRequestErrorType.TIME_OVERLAP);
+        verify(helpRequestRepository, never()).save(any());
+    }
+
+    @Test
+    void create_잠금을기다리는사이비활성화된계정_ACCOUNT_DEACTIVATED이고저장안함() {
+        // given
+        Account account = TestAccounts.withId(STUDENT_ID, AccountRole.STUDENT, "hash", false);
+        account.deactivate(MONDAY.atTime(8, 59));
+        given(studentRepository.findByIdForUpdate(STUDENT_ID)).willReturn(Optional.of(TestProfiles.student(account)));
+
+        // when & then
+        assertThatThrownBy(() -> helpRequestService.create(STUDENT_ID,
+                request(NOON, Set.of(HelpType.SERVING), null, null)))
+                .isInstanceOf(AuthException.class)
+                .extracting("errorCode").isEqualTo(AuthErrorType.ACCOUNT_DEACTIVATED);
+        verify(helpRequestRepository, never()).existsOverlapping(anyLong(), any(), any());
         verify(helpRequestRepository, never()).save(any());
     }
 
@@ -331,15 +350,28 @@ class HelpRequestServiceTest {
     }
 
     @Test
-    void withdraw_장애학생이아닌계정_ACCESS_DENIED이고신청을잠그지않음() {
+    void withdraw_장애학생이아닌계정_ACCESS_DENIED이고신청은그대로() {
         // given
+        HelpRequest request = myRecruitingRequest(1L, NOON);
+        given(helpRequestRepository.findByIdForUpdate(1L)).willReturn(Optional.of(request));
         given(studentRepository.existsById(2L)).willReturn(false);
 
         // when & then
         assertThatThrownBy(() -> helpRequestService.withdraw(2L, 1L))
                 .isInstanceOf(AuthException.class)
                 .extracting("errorCode").isEqualTo(AuthErrorType.ACCESS_DENIED);
-        verify(helpRequestRepository, never()).findByIdForUpdate(anyLong());
+        assertThat(request.getStatus()).isEqualTo(HelpRequestStatus.RECRUITING);
+    }
+
+    @Test
+    void withdraw_없는신청이라도장애학생이아니면_ACCESS_DENIED() {
+        // given
+        given(studentRepository.existsById(2L)).willReturn(false);
+
+        // when & then
+        assertThatThrownBy(() -> helpRequestService.withdraw(2L, 99L))
+                .isInstanceOf(AuthException.class)
+                .extracting("errorCode").isEqualTo(AuthErrorType.ACCESS_DENIED);
     }
 
     // ---- 노쇼 신고 (지금 = 2026-10-12(월) 09:00) ----
@@ -379,6 +411,12 @@ class HelpRequestServiceTest {
         assertThat(result.status()).isEqualTo(HelpRequestStatus.NO_SHOW);
         assertThat(result.helper().name()).isEqualTo("이도움");
         assertThat(result.noShowReportable()).isFalse();
+
+        // 신청 잠금이 트랜잭션의 첫 쿼리 — 지원 조회가 먼저 커밋된 이용 완료 처리까지 보게 (MySQL REPEATABLE READ)
+        InOrder queryOrder = inOrder(helpRequestRepository, studentRepository, applicationRepository);
+        queryOrder.verify(helpRequestRepository).findByIdForUpdate(1L);
+        queryOrder.verify(studentRepository).existsById(STUDENT_ID);
+        queryOrder.verify(applicationRepository).findByHelpRequestIdAndStatus(1L, ApplicationStatus.COMPLETED);
     }
 
     @Test

@@ -100,7 +100,7 @@ domain/{도메인}/
 **도메인 목록**
 ```
 domain/
-├── common/       BaseTimeEntity, LabeledEnum, AbstractEnumConverter, PhoneNumbers, 공통 검증(@PhoneNumber·@KakaoId)
+├── common/       BaseTimeEntity, LabeledEnum, AbstractEnumConverter, PhoneNumbers, PersonalInfoMasks(관리자 목록의 이메일·ID 가림), 공통 검증(@PhoneNumber·@KakaoId)
 ├── account/      Account, AccountRole, AccountStatus
 ├── auth/         RefreshToken, PasswordResetToken, TokenAudience, 로그인·토큰·비밀번호 변경·재설정 API, 관리자가 발급하는 임시 비밀번호 생성(TemporaryPasswords — 장애학생 계정정보·도우미 임시 비밀번호가 같이 씀)
 ├── mail/         MailOutbox, 메일 아웃박스 적재·발송(MailOutboxService, MailRelay)
@@ -328,6 +328,8 @@ public class HelpRequest extends BaseTimeEntity {
 - 시간 기반 자동 처리는 "시각이 지났는데 상태가 그대로인 건"을 찾아 처리한다 (놓친 건도 다음 실행에서 따라잡는다). 대상 ID만 먼저 조회하고, 한 건씩 별도 트랜잭션에서 `findByIdForUpdate`로 잠근 뒤 상태·시각을 다시 확인하고 바꾼다 — 사용자 요청과 겹쳐도 순서가 맞고, 한 건 실패가 다른 건에 번지지 않는다
 - 신청 상태를 바꾸는 작업(지원·취소·승격·자동 처리)은 모두 `HelpRequestRepository.findByIdForUpdate`로 신청 행을 잠근다
 - 지원 행·도우미 행도 잠가야 하는 작업(지원 — 같은 도우미의 겹치는 지원을 한 줄로 세움, 도우미 취소·예비 승격 등)은 **신청 → 지원 → 도우미** 순서로 잠근다(`ApplicationRepository.findByIdForUpdate`·`findWaitingForUpdate`, `HelperRepository.findByIdForUpdate`). 순서가 어긋나면 교착이 생긴다. 잠금은 트랜잭션의 첫 쿼리로 둔다 — MySQL(REPEATABLE READ)에서 잠금 뒤 첫 일반 조회가 스냅샷이 되어야 먼저 커밋된 다른 요청까지 보인다
+  - 도우미 여러 명을 잠가야 하면(예비 승격 후보) 하나씩 잠그지 않고 계정 ID 순으로 한 번에 잠근다(`HelperRepository.findAllByIdForUpdate`). 트랜잭션마다 잠그는 순서가 다르면 교착이 생긴다
+  - 예비 순번·승격 순서는 지원 ID 순이다. 지원 행은 신청 행 락 안에서 저장돼 ID가 서버 도착 순과 같다 (지원 시각은 서버마다 시계가 달라 기준으로 쓰지 않는다)
   - 한 신청을 처리하다가 **다른 신청의 지원**을 바꿔야 하면(매칭된 도우미의 겹치는 다른 예비 자동 제외 등) 같은 트랜잭션에서 하지 않는다 — 이미 쥔 도우미 락 뒤에 다른 신청을 잠그면 순서가 거꾸로 된다. 이벤트를 발행하고 커밋 뒤 한 건씩 새 트랜잭션에서 그 신청부터 잠가 처리한다 (`HelperConfirmedEvent` → `OverlappingWaitExcluder`)
   - 지원 ID로 시작하는 작업(도우미 취소)은 신청 ID를 알려고 먼저 읽어야 해서 첫 쿼리를 잠금으로 둘 수 없다. 이런 트랜잭션은 `@Transactional(isolation = READ_COMMITTED)`로 두고, 잠그기 전에는 엔티티가 아니라 값(신청 ID)만 읽는다 — 먼저 읽은 엔티티는 잠근 뒤 다시 조회해도 처음 읽은 상태가 쓰인다
 
@@ -445,6 +447,7 @@ main에 병합되고 CI 검사(`test`, `secret-scan`, `agent-config`)가 모두 
 **push 전 스모크 테스트**: 단위 테스트는 H2로 돌기 때문에, `docker` job에서 MySQL 8.4를 띄우고 이미지를 `prod` 프로필로 실행해 `/actuator/health`가 UP인지 확인한다. 실패하면 push하지 않는다.
 
 **이미지 실행에 필요한 환경 변수**: `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, `SPRING_DATASOURCE_PASSWORD`. 기본 프로필은 `prod`, 시간대는 Asia/Seoul로 고정, 포트 8080.
+비어 있어도 뜨지만 운영에는 넣는다: `JWT_SECRET`(없으면 서버마다 임의 키 — 2대 이상이면 같은 값이 필요하다. 생성 `openssl rand -base64 32`), `CORS_ALLOWED_ORIGINS`(없으면 브라우저 요청을 모두 막는다), `MAIL_LINK_BASE_URL`(없으면 메일 링크가 localhost를 가리킨다).
 문자 발송(선택): `SMS_SNS_ENABLED=true`, `SMS_SNS_REGION`(기본 ap-northeast-2), `AWS_ACCESS_KEY_ID`·`AWS_SECRET_ACCESS_KEY`(`sns:Publish`만 허용한 IAM 키). 꺼져 있으면 문자는 발송 대기로 남는다.
 
 **롤백**: 이전 버전 태그로 다시 띄운다 (`docker pull ghcr.io/cow-dev/hankki-atti-be:vX.Y.Z`).

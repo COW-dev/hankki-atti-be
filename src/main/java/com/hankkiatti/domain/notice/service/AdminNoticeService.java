@@ -68,11 +68,12 @@ public class AdminNoticeService {
 
     /**
      * 게시. 관리자 계정 행을 잠가 같은 관리자의 동시 요청을 한 줄로 세운 뒤 중복을 확인한다 — 동시에 두 번 눌러도 하나만 저장된다.
+     * 잠금을 트랜잭션의 첫 쿼리로 둔다. 권한 조회가 먼저면 MySQL(REPEATABLE READ)에서 중복 확인이 먼저 커밋된 공지를 못 본다.
      */
     @Transactional
     public AdminNoticeDetailResponseDto create(Long adminAccountId, AdminNoticeSaveRequestDto request) {
-        Admin admin = requireFullAdmin(adminAccountId);
         accountRepository.findByIdForUpdate(adminAccountId);
+        Admin admin = requireFullAdmin(adminAccountId);
 
         LocalDateTime now = LocalDateTime.now(clock);
         String title = request.title().strip();

@@ -25,8 +25,9 @@ public interface HelpRequestControllerDocs {
             시작 시각은 점심 11:30·12:00·12:30·13:00, 저녁 17:00·17:30이고 이용은 1시간 고정(endAt).""")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "로그인 필요")
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "비밀번호 변경 필요")
-    ResponseEntity<ApiResult<List<TimeOptionDateResponseDto>>> getTimeOptions();
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "도우미 계정이거나 비밀번호 변경 필요")
+    ResponseEntity<ApiResult<List<TimeOptionDateResponseDto>>> getTimeOptions(
+            @Parameter(hidden = true) AuthPrincipal principal);
 
     @Operation(summary = "도우미 신청", description = """
             장애학생이 날짜·시작 시각·필요한 도움을 골라 신청한다. 신청은 모집 중으로 시작한다.

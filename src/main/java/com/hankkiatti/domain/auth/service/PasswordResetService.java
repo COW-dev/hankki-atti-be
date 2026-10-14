@@ -131,6 +131,10 @@ public class PasswordResetService {
         if (!token.isUsable(now) || !canReset(account)) {
             throw new AuthException(AuthErrorType.PASSWORD_RESET_LINK_INVALID, "tokenId=" + token.getId());
         }
+        // 비밀번호 변경과 같은 규칙 — 초기 비밀번호를 받은 장애학생이 재설정으로 같은 값을 넣어 변경 필요 상태를 풀지 못하게
+        if (passwordEncoder.matches(request.newPassword(), account.getPasswordHash())) {
+            throw new AuthException(AuthErrorType.SAME_AS_CURRENT_PASSWORD, "accountId=" + accountId);
+        }
 
         token.markUsed(now);
         // tokenVersion이 올라 access 토큰이 바로 무효가 되고, refresh 토큰은 모두 폐기한다

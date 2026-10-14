@@ -12,6 +12,7 @@ import com.hankkiatti.domain.auth.exception.AuthErrorType;
 import com.hankkiatti.domain.auth.exception.AuthException;
 import com.hankkiatti.domain.auth.repository.PasswordResetTokenRepository;
 import com.hankkiatti.domain.auth.service.TemporaryPasswords;
+import com.hankkiatti.domain.common.PersonalInfoMasks;
 import com.hankkiatti.domain.common.PhoneNumbers;
 import com.hankkiatti.domain.helprequest.entity.HelpRequest;
 import com.hankkiatti.domain.helprequest.event.HelpRequestCanceledByStudentEvent;
@@ -47,6 +48,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
@@ -131,19 +133,26 @@ public class AdminStudentService {
         Student student = studentRepository.findById(studentAccountId)
                 .orElseThrow(() -> new StudentException(StudentErrorType.NOT_FOUND,
                         "studentAccountId=" + studentAccountId));
-        long activeRequestCount = helpRequestRepository.countActiveByStudentAccountId(studentAccountId);
+        long activeRequestCount = helpRequestRepository.countActiveBeforeMealByStudentAccountId(
+                studentAccountId, LocalDateTime.now(clock));
         return new AdminStudentDeactivationPreviewResponseDto(
                 studentAccountId, !student.getAccount().isActive(), activeRequestCount);
     }
 
-    @Transactional
+    /**
+     * 권한 확인(관리자 조회)이 잠금보다 먼저라 READ_COMMITTED로 둔다. REPEATABLE READ면 첫 조회 때 스냅샷이 잡혀,
+     * 잠금을 기다리는 사이 이 장애학생이 새로 커밋한 신청을 취소 대상 조회에서 못 본다.
+     */
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public AdminStudentAccountStatusResponseDto deactivate(Long adminAccountId, Long studentAccountId) {
         requireFullAdmin(adminAccountId);
         Account account = findStudentAccountForUpdate(studentAccountId);
         findStudentForUpdate(studentAccountId);
 
         LocalDateTime now = LocalDateTime.now(clock);
-        List<Long> activeRequestIds = helpRequestRepository.findActiveIdsByStudentAccountId(studentAccountId);
+        // 식사가 시작된 신청은 취소하지 않는다 (장애학생 매칭 취소와 같은 기준, 2026-10-10 결정)
+        List<Long> activeRequestIds =
+                helpRequestRepository.findActiveIdsBeforeMealByStudentAccountId(studentAccountId, now);
         int canceledApplications = 0;
         for (Long requestId : activeRequestIds) {
             HelpRequest helpRequest = helpRequestRepository.findByIdForUpdate(requestId).orElse(null);
@@ -337,36 +346,11 @@ public class AdminStudentService {
                 student.getName(),
                 student.getStudentNo(),
                 fullAdmin ? student.getDisabilityType() : null,
-                fullAdmin ? maskEmail(student.getSchoolEmail()) : null,
-                fullAdmin ? maskPhone(student.getPhone()) : null,
-                fullAdmin ? maskIdentifier(student.getKakaoId()) : null,
+                fullAdmin ? PersonalInfoMasks.email(student.getSchoolEmail()) : null,
+                fullAdmin ? PhoneNumbers.mask(student.getPhone()) : null,
+                fullAdmin ? PersonalInfoMasks.identifier(student.getKakaoId()) : null,
                 account.getStatus(),
                 recentRequestAt);
-    }
-
-    private static String maskEmail(String email) {
-        int separator = email.indexOf('@');
-        if (separator <= 0) {
-            return maskIdentifier(email);
-        }
-        return maskIdentifier(email.substring(0, separator)) + email.substring(separator);
-    }
-
-    private static String maskPhone(String phone) {
-        int firstSeparator = phone.indexOf('-');
-        int lastSeparator = phone.lastIndexOf('-');
-        if (firstSeparator < 0 || firstSeparator == lastSeparator) {
-            return maskIdentifier(phone);
-        }
-        return phone.substring(0, firstSeparator + 1)
-                + "*".repeat(lastSeparator - firstSeparator - 1)
-                + phone.substring(lastSeparator);
-    }
-
-    private static String maskIdentifier(String value) {
-        int visibleLength = Math.min(2, value.length());
-        int maskedLength = Math.max(3, value.length() - visibleLength);
-        return value.substring(0, visibleLength) + "*".repeat(maskedLength);
     }
 
     private String credentialMailBody(String loginId, String temporaryPassword) {

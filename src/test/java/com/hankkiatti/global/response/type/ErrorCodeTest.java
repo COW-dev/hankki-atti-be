@@ -5,7 +5,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.hankkiatti.domain.account.exception.AccountErrorType;
 import com.hankkiatti.domain.application.exception.ApplicationErrorType;
 import com.hankkiatti.domain.auth.exception.AuthErrorType;
+import com.hankkiatti.domain.helper.exception.HelperErrorType;
 import com.hankkiatti.domain.helprequest.exception.HelpRequestErrorType;
+import com.hankkiatti.domain.notice.exception.NoticeErrorType;
+import com.hankkiatti.domain.notification.exception.NotificationErrorType;
+import com.hankkiatti.domain.student.exception.StudentErrorType;
 import java.util.List;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
@@ -28,7 +32,11 @@ class ErrorCodeTest {
                         AuthErrorType.values(),
                         AccountErrorType.values(),
                         HelpRequestErrorType.values(),
-                        ApplicationErrorType.values())
+                        ApplicationErrorType.values(),
+                        HelperErrorType.values(),
+                        StudentErrorType.values(),
+                        NoticeErrorType.values(),
+                        NotificationErrorType.values())
                 .flatMap(Stream::of)
                 .map(ErrorCode.class::cast)
                 .toList();

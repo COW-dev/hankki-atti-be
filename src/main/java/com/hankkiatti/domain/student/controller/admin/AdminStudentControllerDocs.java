@@ -55,7 +55,7 @@ public interface AdminStudentControllerDocs {
             @Parameter(description = "학생 계정 ID") Long studentAccountId);
 
     @Operation(summary = "장애학생 계정 비활성화 미리보기", description = """
-            비활성화 확인 모달에 표시할 진행 중 신청 수를 조회합니다.
+            비활성화 확인 모달에 표시할 진행 중 신청 수를 조회합니다. 식사가 이미 시작된 신청은 취소되지 않으므로 세지 않습니다.
             전체 권한 관리자만 사용할 수 있으며, 이미 비활성화된 계정이면 alreadyInactive가 true입니다.
             """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공")
@@ -67,7 +67,8 @@ public interface AdminStudentControllerDocs {
 
     @Operation(summary = "장애학생 계정 비활성화", description = """
             전체 권한 관리자가 계정을 비활성화합니다. 기존 로그인 토큰과 비밀번호 재설정 링크를 무효화하고,
-            진행 중인 신청과 해당 신청의 활성 지원을 함께 취소합니다.
+            진행 중인 신청과 해당 신청의 활성 지원을 함께 취소합니다. 식사가 이미 시작된 신청은 그대로 두어
+            자동 처리(매칭 실패·이용 완료)를 따릅니다.
             """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "비활성화 성공")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "전체 권한 관리자만 사용 가능")

@@ -1,9 +1,12 @@
 package com.hankkiatti.domain.helprequest.service;
 
+import com.hankkiatti.domain.auth.exception.AuthErrorType;
+import com.hankkiatti.domain.auth.exception.AuthException;
 import com.hankkiatti.domain.helprequest.dto.response.TimeOptionDateResponseDto;
 import com.hankkiatti.domain.helprequest.dto.response.TimeOptionResponseDto;
 import com.hankkiatti.domain.helprequest.entity.HelpRequest;
 import com.hankkiatti.domain.helprequest.entity.Meal;
+import com.hankkiatti.domain.student.repository.StudentRepository;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -22,9 +25,14 @@ import org.springframework.stereotype.Service;
 public class TimeOptionService {
 
     private final HelpRequestSchedule helpRequestSchedule;
+    private final StudentRepository studentRepository;
     private final Clock clock;
 
-    public List<TimeOptionDateResponseDto> getTimeOptions() {
+    // 신청 화면에서만 쓰므로 장애학생만 부른다 (다른 장애학생 API와 같은 기준)
+    public List<TimeOptionDateResponseDto> getTimeOptions(Long accountId) {
+        if (!studentRepository.existsById(accountId)) {
+            throw new AuthException(AuthErrorType.ACCESS_DENIED, "장애학생 전용, accountId=" + accountId);
+        }
         Map<LocalDate, List<TimeOptionResponseDto>> byDate = helpRequestSchedule
                 .bookableStartTimes(LocalDateTime.now(clock)).stream()
                 .collect(Collectors.groupingBy(LocalDateTime::toLocalDate, LinkedHashMap::new,

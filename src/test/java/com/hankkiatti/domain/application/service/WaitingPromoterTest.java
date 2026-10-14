@@ -3,6 +3,7 @@ package com.hankkiatti.domain.application.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
@@ -23,10 +24,10 @@ import com.hankkiatti.support.TestHelpRequests;
 import com.hankkiatti.support.TestProfiles;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
@@ -69,7 +70,6 @@ class WaitingPromoterTest {
 
     private void givenCandidateWithNoOtherMatch() {
         given(applicationRepository.findWaitingForUpdate(REQUEST_ID)).willReturn(List.of(waiting));
-        given(helperRepository.findByIdForUpdate(8L)).willReturn(Optional.of(candidate));
         given(applicationRepository.findActiveWithHelpRequestByHelperId(8L)).willReturn(List.of(waiting));
     }
 
@@ -142,6 +142,29 @@ class WaitingPromoterTest {
     }
 
     @Test
+    void promoteOrReopen_후보도우미를확인전에한번에잠근다() {
+        // given — 예비 2명 (지원 순: 8번 → 3번 도우미). 8번이 승격돼도 3번까지 같이 잠근다
+        Helper laterCandidate = TestProfiles.helper(TestAccounts.withId(3L, AccountRole.HELPER, "hash", false),
+                "60230003");
+        ReflectionTestUtils.setField(laterCandidate, "accountId", 3L);
+        Application laterWaiting = new Application(request, laterCandidate, NOON.minusDays(1));
+        given(applicationRepository.findWaitingForUpdate(REQUEST_ID)).willReturn(List.of(waiting, laterWaiting));
+        given(applicationRepository.findActiveWithHelpRequestByHelperId(8L)).willReturn(List.of(waiting));
+
+        // when
+        waitingPromoter.promoteOrReopen(request, NOON.minusHours(3));
+
+        // then — 같은 도우미들이 예비인 다른 신청과 반대 순서로 잠그지 않게, 계정 ID 순 정렬은 쿼리가 한다
+        InOrder lockOrder = inOrder(applicationRepository, helperRepository);
+        lockOrder.verify(applicationRepository).findWaitingForUpdate(REQUEST_ID);
+        lockOrder.verify(helperRepository).findAllByIdForUpdate(List.of(8L, 3L));
+        lockOrder.verify(applicationRepository).findActiveWithHelpRequestByHelperId(8L);
+        verify(helperRepository, never()).findByIdForUpdate(any());
+        assertThat(waiting.getStatus()).isEqualTo(ApplicationStatus.MATCHED);
+        assertThat(laterWaiting.getStatus()).isEqualTo(ApplicationStatus.WAITING);
+    }
+
+    @Test
     void promoteOrReopen_예비없음_모집재개() {
         // given
         given(applicationRepository.findWaitingForUpdate(REQUEST_ID)).willReturn(List.of());
@@ -153,5 +176,6 @@ class WaitingPromoterTest {
         assertThat(result).isEqualTo(ApplicationAfterAction.REOPENED);
         assertThat(request.getStatus()).isEqualTo(HelpRequestStatus.RECRUITING);
         verify(eventPublisher).publishEvent(new HelpRequestReopenedEvent(REQUEST_ID));
+        verify(helperRepository, never()).findAllByIdForUpdate(any());
     }
 }

@@ -44,11 +44,10 @@ public class WaitingPromoter {
      */
     public ApplicationAfterAction promoteOrReopen(HelpRequest request, LocalDateTime now) {
         List<Application> waiting = applicationRepository.findWaitingForUpdate(request.getId());
+        lockCandidateHelpers(waiting);
         for (int index = 0; index < waiting.size(); index++) {
             Application candidate = waiting.get(index);
             Long candidateId = candidate.getHelper().getAccountId();
-            // 후보가 동시에 겹치는 다른 신청에 지원하는 것과 한 줄로 서도록 도우미 행을 잠근 뒤 확인한다
-            helperRepository.findByIdForUpdate(candidateId);
             List<Application> candidateActive = applicationRepository.findActiveWithHelpRequestByHelperId(candidateId);
             if (applyPolicy.overlapsConfirmed(request, candidateActive)) {
                 candidate.exclude();
@@ -64,6 +63,20 @@ public class WaitingPromoter {
         request.reopen();
         eventPublisher.publishEvent(new HelpRequestReopenedEvent(request.getId()));
         return ApplicationAfterAction.REOPENED;
+    }
+
+    /**
+     * 후보 도우미 행을 확인 전에 한 번에, 계정 ID 순으로 잠근다. 후보가 동시에 겹치는 다른 신청에 지원하는 것과 한 줄로 서게 한다.
+     * 후보마다 지원 순으로 잠그면, 같은 두 도우미가 예비인 두 신청이 동시에 승격할 때 서로 반대 순서로 잠가 교착이 생긴다.
+     */
+    private void lockCandidateHelpers(List<Application> waiting) {
+        if (waiting.isEmpty()) {
+            return;
+        }
+        List<Long> candidateIds = waiting.stream()
+                .map(application -> application.getHelper().getAccountId())
+                .toList();
+        helperRepository.findAllByIdForUpdate(candidateIds);
     }
 
     /**

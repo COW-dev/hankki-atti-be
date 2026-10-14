@@ -21,7 +21,7 @@ public interface AdminHelperControllerDocs {
 
     @Operation(summary = "도우미 목록", description = """
             이름·학번 검색(q), 계정 상태·아띠 소속 필터. 가입 최근순 20명씩, page는 0부터.
-            전화번호는 가운데를 가려서 준다(maskedPhone) — 전체 번호는 상세에서.""")
+            이메일·전화번호·카톡 ID는 일부를 가려서 준다(maskedEmail·maskedPhone·maskedKakaoId) — 전체는 상세에서.""")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "COMMON_INVALID_REQUEST — status·attiMember·page 형식이 틀림")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "로그인 필요")
