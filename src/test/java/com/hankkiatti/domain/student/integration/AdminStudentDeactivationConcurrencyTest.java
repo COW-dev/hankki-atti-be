@@ -10,6 +10,7 @@ import com.hankkiatti.domain.admin.entity.Admin;
 import com.hankkiatti.domain.admin.entity.AdminGrade;
 import com.hankkiatti.domain.admin.repository.AdminRepository;
 import com.hankkiatti.domain.application.dto.response.ApplyResponseDto;
+import com.hankkiatti.domain.application.entity.Application;
 import com.hankkiatti.domain.application.entity.ApplicationStatus;
 import com.hankkiatti.domain.application.exception.ApplicationErrorType;
 import com.hankkiatti.domain.application.exception.ApplicationException;
@@ -173,6 +174,33 @@ class AdminStudentDeactivationConcurrencyTest {
                 .filteredOn(job -> job.getType() == NotificationJobType.STUDENT_CANCELED)
                 .extracting(NotificationJob::getTargetId)
                 .containsExactly(applicationId);
+    }
+
+    @Test
+    void deactivate_식사가시작된매칭건_취소하지않고자동처리에맡긴다() {
+        // given — 20분 전에 시작한 식사에 도우미가 매칭돼 있다
+        LocalDateTime now = LocalDateTime.now(clock);
+        Student student = studentRepository.findById(studentId).orElseThrow();
+        HelpRequest started = new HelpRequest(student, now.minusMinutes(20), Set.of(HelpType.SERVING), null, null);
+        started.match(now.minusDays(1));
+        Long startedId = helpRequestRepository.save(started).getId();
+        Application matched = new Application(started, helperRepository.findById(helperId).orElseThrow(),
+                now.minusDays(1));
+        matched.match(now.minusDays(1));
+        Long matchedId = applicationRepository.save(matched).getId();
+
+        // when
+        adminStudentService.deactivate(adminId, studentId);
+
+        // then — 시작 전 신청만 취소되고, 식사 중인 매칭은 그대로라 식사 종료 때 봉사시간이 기록된다
+        assertThat(helpRequestRepository.findById(helpRequestId).orElseThrow().getStatus())
+                .isEqualTo(HelpRequestStatus.CANCELED);
+        assertThat(helpRequestRepository.findById(startedId).orElseThrow().getStatus())
+                .isEqualTo(HelpRequestStatus.MATCHED);
+        assertThat(applicationRepository.findById(matchedId).orElseThrow().getStatus())
+                .isEqualTo(ApplicationStatus.MATCHED);
+        assertThat(notificationJobRepository.findAll())
+                .noneMatch(job -> job.getType() == NotificationJobType.STUDENT_CANCELED);
     }
 
     private List<Object> runConcurrently(List<Callable<Object>> tasks) throws Exception {

@@ -173,7 +173,7 @@ class DomainRepositoryTest {
     }
 
     @Test
-    void 계정비활성화대상조회_진행중신청과활성지원만조회() {
+    void 계정비활성화대상조회_식사시작전진행중신청과활성지원만조회() {
         // given
         Student student = saveStudent();
         Helper helper = saveHelper();
@@ -187,6 +187,11 @@ class DomainRepositoryTest {
                 student, NOW.plusDays(3), Set.of(HelpType.MOVING), null, null);
         canceled.withdraw(NOW);
         helpRequestRepository.save(canceled);
+        // 식사가 이미 시작된 매칭 건은 취소 대상이 아니다 — 스케줄러가 이용 완료로 처리한다
+        HelpRequest started = new HelpRequest(
+                student, NOW.minusMinutes(20), Set.of(HelpType.SERVING), null, null);
+        started.match(NOW.minusDays(1));
+        helpRequestRepository.save(started);
 
         Application matchedApplication = new Application(matched, helper, NOW);
         matchedApplication.match(NOW);
@@ -200,8 +205,9 @@ class DomainRepositoryTest {
         flushAndClear();
 
         // when
-        List<Long> requestIds = helpRequestRepository.findActiveIdsByStudentAccountId(student.getAccountId());
-        long requestCount = helpRequestRepository.countActiveByStudentAccountId(student.getAccountId());
+        List<Long> requestIds =
+                helpRequestRepository.findActiveIdsBeforeMealByStudentAccountId(student.getAccountId(), NOW);
+        long requestCount = helpRequestRepository.countActiveBeforeMealByStudentAccountId(student.getAccountId(), NOW);
         List<Application> applications = applicationRepository.findActiveForUpdate(matched.getId());
 
         // then

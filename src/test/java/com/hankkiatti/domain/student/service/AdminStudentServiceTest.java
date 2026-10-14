@@ -363,7 +363,7 @@ class AdminStudentServiceTest {
         givenFullAdmin();
         Student student = student(studentAccount(10L));
         given(studentRepository.findById(10L)).willReturn(Optional.of(student));
-        given(helpRequestRepository.countActiveByStudentAccountId(10L)).willReturn(2L);
+        given(helpRequestRepository.countActiveBeforeMealByStudentAccountId(10L, NOW)).willReturn(2L);
 
         // when
         AdminStudentDeactivationPreviewResponseDto result =
@@ -385,7 +385,7 @@ class AdminStudentServiceTest {
                 .isInstanceOf(AuthException.class)
                 .extracting("errorCode").isEqualTo(AuthErrorType.ACCESS_DENIED);
         verify(studentRepository, never()).findById(any());
-        verify(helpRequestRepository, never()).countActiveByStudentAccountId(any());
+        verify(helpRequestRepository, never()).countActiveBeforeMealByStudentAccountId(any(), any());
     }
 
     @Test
@@ -398,7 +398,7 @@ class AdminStudentServiceTest {
         assertThatThrownBy(() -> adminStudentService.previewDeactivation(ADMIN_ID, 99L))
                 .isInstanceOf(StudentException.class)
                 .extracting("errorCode").isEqualTo(StudentErrorType.NOT_FOUND);
-        verify(helpRequestRepository, never()).countActiveByStudentAccountId(any());
+        verify(helpRequestRepository, never()).countActiveBeforeMealByStudentAccountId(any(), any());
     }
 
     @Test
@@ -419,7 +419,8 @@ class AdminStudentServiceTest {
 
         given(accountRepository.findByIdForUpdate(10L)).willReturn(Optional.of(account));
         given(studentRepository.findByIdForUpdate(10L)).willReturn(Optional.of(student));
-        given(helpRequestRepository.findActiveIdsByStudentAccountId(10L)).willReturn(List.of(101L, 102L));
+        given(helpRequestRepository.findActiveIdsBeforeMealByStudentAccountId(10L, NOW))
+                .willReturn(List.of(101L, 102L));
         given(helpRequestRepository.findByIdForUpdate(101L)).willReturn(Optional.of(recruiting));
         given(helpRequestRepository.findByIdForUpdate(102L)).willReturn(Optional.of(matched));
         given(applicationRepository.findActiveForUpdate(101L)).willReturn(List.of());
@@ -447,7 +448,7 @@ class AdminStudentServiceTest {
                 accountRepository, studentRepository, helpRequestRepository, applicationRepository);
         lockOrder.verify(accountRepository).findByIdForUpdate(10L);
         lockOrder.verify(studentRepository).findByIdForUpdate(10L);
-        lockOrder.verify(helpRequestRepository).findActiveIdsByStudentAccountId(10L);
+        lockOrder.verify(helpRequestRepository).findActiveIdsBeforeMealByStudentAccountId(10L, NOW);
         lockOrder.verify(helpRequestRepository).findByIdForUpdate(101L);
         lockOrder.verify(applicationRepository).findActiveForUpdate(101L);
         lockOrder.verify(helpRequestRepository).findByIdForUpdate(102L);
@@ -472,7 +473,7 @@ class AdminStudentServiceTest {
         assertThat(account.getDeactivatedAt()).isNull();
         assertThat(result.status()).isEqualTo(AccountStatus.ACTIVE);
         assertThat(result.deactivatedAt()).isNull();
-        verify(helpRequestRepository, never()).findActiveIdsByStudentAccountId(any());
+        verify(helpRequestRepository, never()).findActiveIdsBeforeMealByStudentAccountId(any(), any());
 
         InOrder lockOrder = org.mockito.Mockito.inOrder(accountRepository, studentRepository);
         lockOrder.verify(accountRepository).findByIdForUpdate(10L);

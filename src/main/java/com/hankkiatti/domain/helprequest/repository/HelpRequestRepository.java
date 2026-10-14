@@ -26,22 +26,32 @@ public interface HelpRequestRepository extends JpaRepository<HelpRequest, Long> 
 
     List<HelpRequest> findByStudentAccountId(Long studentId);
 
-    default List<Long> findActiveIdsByStudentAccountId(Long studentId) {
-        return findIdsByStudentAccountIdAndStatusIn(studentId, HelpRequestStatus.IN_PROGRESS);
+    /**
+     * 장애학생 계정 비활성화로 취소할 신청: 진행 중(모집 중·매칭 완료)이고 식사가 아직 시작 전인 것.
+     * 식사가 시작된 신청은 두면 스케줄러가 매칭 실패·이용 완료로 처리한다 — 와 있는 도우미의 봉사시간이 사라지지 않게.
+     */
+    default List<Long> findActiveIdsBeforeMealByStudentAccountId(Long studentId, LocalDateTime now) {
+        return findIdsBeforeMealByStudentAccountId(studentId, HelpRequestStatus.IN_PROGRESS, now);
     }
 
-    default long countActiveByStudentAccountId(Long studentId) {
-        return countByStudentAccountIdAndStatusIn(studentId, HelpRequestStatus.IN_PROGRESS);
+    default long countActiveBeforeMealByStudentAccountId(Long studentId, LocalDateTime now) {
+        return countBeforeMealByStudentAccountId(studentId, HelpRequestStatus.IN_PROGRESS, now);
     }
 
     @Query("""
             select r.id from HelpRequest r
-            where r.student.accountId = :studentId and r.status in :statuses
+            where r.student.accountId = :studentId and r.status in :statuses and r.startAt > :now
             order by r.id""")
-    List<Long> findIdsByStudentAccountIdAndStatusIn(@Param("studentId") Long studentId,
-                                                    @Param("statuses") List<HelpRequestStatus> statuses);
+    List<Long> findIdsBeforeMealByStudentAccountId(@Param("studentId") Long studentId,
+                                                   @Param("statuses") List<HelpRequestStatus> statuses,
+                                                   @Param("now") LocalDateTime now);
 
-    long countByStudentAccountIdAndStatusIn(Long studentId, List<HelpRequestStatus> statuses);
+    @Query("""
+            select count(r) from HelpRequest r
+            where r.student.accountId = :studentId and r.status in :statuses and r.startAt > :now""")
+    long countBeforeMealByStudentAccountId(@Param("studentId") Long studentId,
+                                           @Param("statuses") List<HelpRequestStatus> statuses,
+                                           @Param("now") LocalDateTime now);
 
     @Query("""
             select r.student.accountId as studentAccountId, max(r.startAt) as recentRequestAt

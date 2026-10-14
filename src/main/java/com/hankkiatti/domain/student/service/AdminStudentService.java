@@ -131,7 +131,8 @@ public class AdminStudentService {
         Student student = studentRepository.findById(studentAccountId)
                 .orElseThrow(() -> new StudentException(StudentErrorType.NOT_FOUND,
                         "studentAccountId=" + studentAccountId));
-        long activeRequestCount = helpRequestRepository.countActiveByStudentAccountId(studentAccountId);
+        long activeRequestCount = helpRequestRepository.countActiveBeforeMealByStudentAccountId(
+                studentAccountId, LocalDateTime.now(clock));
         return new AdminStudentDeactivationPreviewResponseDto(
                 studentAccountId, !student.getAccount().isActive(), activeRequestCount);
     }
@@ -143,7 +144,9 @@ public class AdminStudentService {
         findStudentForUpdate(studentAccountId);
 
         LocalDateTime now = LocalDateTime.now(clock);
-        List<Long> activeRequestIds = helpRequestRepository.findActiveIdsByStudentAccountId(studentAccountId);
+        // 식사가 시작된 신청은 취소하지 않는다 (장애학생 매칭 취소와 같은 기준, 2026-10-10 결정)
+        List<Long> activeRequestIds =
+                helpRequestRepository.findActiveIdsBeforeMealByStudentAccountId(studentAccountId, now);
         int canceledApplications = 0;
         for (Long requestId : activeRequestIds) {
             HelpRequest helpRequest = helpRequestRepository.findByIdForUpdate(requestId).orElse(null);
