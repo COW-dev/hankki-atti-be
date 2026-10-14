@@ -55,6 +55,9 @@ sms:
     # true면 AWS SNS로 보낸다. 자격 증명은 환경 변수 AWS_ACCESS_KEY_ID·AWS_SECRET_ACCESS_KEY (저장소에 넣지 않는다)
     enabled: ${SMS_SNS_ENABLED:false}
     region: ${SMS_SNS_REGION:ap-northeast-2}
+    # SNS가 응답하지 않을 때 문자 스레드가 묶이는 최대 시간 (시도 1회 / 재시도 포함 전체)
+    api-call-attempt-timeout: 3s
+    api-call-timeout: 10s
   outbox:
     poll-interval: PT10S
     batch-size: 20

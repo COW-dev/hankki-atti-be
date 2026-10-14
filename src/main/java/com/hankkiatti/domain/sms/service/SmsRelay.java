@@ -27,21 +27,22 @@ public class SmsRelay {
     private final AtomicBoolean notConfiguredWarned = new AtomicBoolean(false);
 
     /**
-     * 보낼 때가 된 문자를 한 번에 batchSize만큼 보낸다.
+     * 보낼 때가 된 문자를 한 번에 batchSize만큼 찾는다. 발송 설정이 없으면 빈 목록이다.
      */
-    public void dispatchDue() {
+    public List<Long> findDueIds() {
         if (!isReady()) {
-            return;
+            return List.of();
         }
         LocalDateTime now = now();
-        List<Long> ids = smsOutboxRepository.findDispatchableIds(
-                now, staleBefore(now), smsProperties.outbox().batchSize());
-        ids.forEach(this::dispatchSafely);
+        return smsOutboxRepository.findDispatchableIds(now, staleBefore(now), smsProperties.outbox().batchSize());
     }
 
-    // 한 통이 예상 못 한 예외(발송 뒤 완료 기록 실패 등)로 끝나도 같은 배치의 나머지는 보낸다. 그 통은 선점 만료 뒤 다시 보낸다.
-    // 예외 메시지에는 수신 번호가 들어갈 수 있어 종류만 남긴다
-    private void dispatchSafely(Long outboxId) {
+    /**
+     * 문자 한 통을 보내고, 예상 못 한 예외(발송 뒤 완료 기록 실패 등)는 로그만 남긴다 — 그 통은 선점 만료 뒤 다시 보낸다.
+     * 폴러가 문자 전용 스레드 풀에 넘겨 부르므로 예외가 풀 밖으로 나가지 않게 한다.
+     * 예외 메시지에는 수신 번호가 들어갈 수 있어 종류만 남긴다.
+     */
+    public void dispatchSafely(Long outboxId) {
         try {
             dispatch(outboxId);
         } catch (RuntimeException e) {

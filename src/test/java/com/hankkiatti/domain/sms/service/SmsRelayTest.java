@@ -1,5 +1,6 @@
 package com.hankkiatti.domain.sms.service;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -46,7 +47,8 @@ class SmsRelayTest {
 
     @BeforeEach
     void setUp() {
-        SmsProperties properties = new SmsProperties(new SmsProperties.Sns(true, "ap-northeast-2"),
+        SmsProperties properties = new SmsProperties(new SmsProperties.Sns(true, "ap-northeast-2", Duration.ofSeconds(3),
+                Duration.ofSeconds(10)),
                 new SmsProperties.Outbox(20, List.of(Duration.ofMinutes(1)), Duration.ofMinutes(5)));
         Clock clock = Clock.fixed(NOW.atZone(SEOUL).toInstant(), SEOUL);
         smsRelay = new SmsRelay(smsOutboxRepository, smsOutboxRecorder, smsSender, properties, clock);
@@ -108,41 +110,41 @@ class SmsRelayTest {
 
         // when
         smsRelay.dispatch(1L);
-        smsRelay.dispatchDue();
+        List<Long> dueIds = smsRelay.findDueIds();
 
         // then
+        assertThat(dueIds).isEmpty();
         verifyNoInteractions(smsOutboxRepository);
     }
 
     @Test
-    void dispatchDue_보낼때가된문자를배치크기만큼처리() {
+    void findDueIds_보낼때가된문자를배치크기만큼찾는다() {
         // given
         given(smsSender.isConfigured()).willReturn(true);
         given(smsOutboxRepository.findDispatchableIds(eq(NOW), eq(NOW.minusMinutes(5)), anyInt()))
                 .willReturn(List.of(1L, 2L));
 
         // when
-        smsRelay.dispatchDue();
+        List<Long> dueIds = smsRelay.findDueIds();
 
         // then
+        assertThat(dueIds).containsExactly(1L, 2L);
         verify(smsOutboxRepository).findDispatchableIds(NOW, NOW.minusMinutes(5), 20);
-        verify(smsOutboxRepository).claim(1L, NOW, NOW.minusMinutes(5));
-        verify(smsOutboxRepository).claim(2L, NOW, NOW.minusMinutes(5));
+        verify(smsOutboxRepository, never()).claim(anyLong(), any(), any());
     }
 
     @Test
-    void dispatchDue_한통이완료기록에서실패해도_나머지는보낸다() {
+    void dispatchSafely_완료기록에서예외_삼키고다음건은보낸다() {
         // given — 1번은 보낸 뒤 완료 기록에서 DB 예외
         given(smsSender.isConfigured()).willReturn(true);
-        given(smsOutboxRepository.findDispatchableIds(eq(NOW), eq(NOW.minusMinutes(5)), anyInt()))
-                .willReturn(List.of(1L, 2L));
         given(smsOutboxRepository.claim(anyLong(), eq(NOW), eq(NOW.minusMinutes(5)))).willReturn(true);
         given(smsOutboxRepository.findById(anyLong())).willReturn(Optional.of(sms()));
         willThrow(new DataAccessResourceFailureException("db down")).willDoNothing()
                 .given(smsOutboxRecorder).markSent(anyLong(), eq(NOW));
 
         // when
-        smsRelay.dispatchDue();
+        smsRelay.dispatchSafely(1L);
+        smsRelay.dispatchSafely(2L);
 
         // then
         verify(smsOutboxRecorder).markSent(2L, NOW);
