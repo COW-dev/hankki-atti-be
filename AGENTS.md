@@ -447,6 +447,7 @@ main에 병합되고 CI 검사(`test`, `secret-scan`, `agent-config`)가 모두 
 **push 전 스모크 테스트**: 단위 테스트는 H2로 돌기 때문에, `docker` job에서 MySQL 8.4를 띄우고 이미지를 `prod` 프로필로 실행해 `/actuator/health`가 UP인지 확인한다. 실패하면 push하지 않는다.
 
 **이미지 실행에 필요한 환경 변수**: `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, `SPRING_DATASOURCE_PASSWORD`. 기본 프로필은 `prod`, 시간대는 Asia/Seoul로 고정, 포트 8080.
+비어 있어도 뜨지만 운영에는 넣는다: `JWT_SECRET`(없으면 서버마다 임의 키 — 2대 이상이면 같은 값이 필요하다. 생성 `openssl rand -base64 32`), `CORS_ALLOWED_ORIGINS`(없으면 브라우저 요청을 모두 막는다), `MAIL_LINK_BASE_URL`(없으면 메일 링크가 localhost를 가리킨다).
 문자 발송(선택): `SMS_SNS_ENABLED=true`, `SMS_SNS_REGION`(기본 ap-northeast-2), `AWS_ACCESS_KEY_ID`·`AWS_SECRET_ACCESS_KEY`(`sns:Publish`만 허용한 IAM 키). 꺼져 있으면 문자는 발송 대기로 남는다.
 
 **롤백**: 이전 버전 태그로 다시 띄운다 (`docker pull ghcr.io/cow-dev/hankki-atti-be:vX.Y.Z`).
