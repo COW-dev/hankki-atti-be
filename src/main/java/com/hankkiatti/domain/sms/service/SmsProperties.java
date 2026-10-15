@@ -17,7 +17,11 @@ public record SmsProperties(
     public record Sns(
             // false면 SNS 클라이언트를 만들지 않고 문자는 발송 대기로 남는다
             @DefaultValue("false") boolean enabled,
-            @DefaultValue("ap-northeast-2") String region
+            @DefaultValue("ap-northeast-2") String region,
+            // SNS 호출 한 번(시도 1회)의 최대 시간
+            @DefaultValue("3s") Duration apiCallAttemptTimeout,
+            // SDK 재시도까지 합친 발송 한 건의 최대 시간. 넘으면 실패로 보고 아웃박스가 다시 보낸다
+            @DefaultValue("10s") Duration apiCallTimeout
     ) {}
 
     public record Outbox(

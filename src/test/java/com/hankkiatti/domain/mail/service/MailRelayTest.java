@@ -1,5 +1,6 @@
 package com.hankkiatti.domain.mail.service;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -109,41 +110,41 @@ class MailRelayTest {
 
         // when
         mailRelay.dispatch(1L);
-        mailRelay.dispatchDue();
+        List<Long> dueIds = mailRelay.findDueIds();
 
         // then
+        assertThat(dueIds).isEmpty();
         verifyNoInteractions(mailOutboxRepository);
     }
 
     @Test
-    void dispatchDue_보낼때가된메일을배치크기만큼처리() {
+    void findDueIds_보낼때가된메일을배치크기만큼찾는다() {
         // given
         given(smtpMailClient.isConfigured()).willReturn(true);
         given(mailOutboxRepository.findDispatchableIds(eq(NOW), eq(NOW.minusMinutes(5)), anyInt()))
                 .willReturn(List.of(1L, 2L));
 
         // when
-        mailRelay.dispatchDue();
+        List<Long> dueIds = mailRelay.findDueIds();
 
         // then
+        assertThat(dueIds).containsExactly(1L, 2L);
         verify(mailOutboxRepository).findDispatchableIds(NOW, NOW.minusMinutes(5), 20);
-        verify(mailOutboxRepository).claim(1L, NOW, NOW.minusMinutes(5));
-        verify(mailOutboxRepository).claim(2L, NOW, NOW.minusMinutes(5));
+        verify(mailOutboxRepository, never()).claim(anyLong(), any(), any());
     }
 
     @Test
-    void dispatchDue_한통이완료기록에서실패해도_나머지는보낸다() {
+    void dispatchSafely_완료기록에서예외_삼키고다음건은보낸다() {
         // given — 1번은 보낸 뒤 완료 기록에서 DB 예외
         given(smtpMailClient.isConfigured()).willReturn(true);
-        given(mailOutboxRepository.findDispatchableIds(eq(NOW), eq(NOW.minusMinutes(5)), anyInt()))
-                .willReturn(List.of(1L, 2L));
         given(mailOutboxRepository.claim(anyLong(), eq(NOW), eq(NOW.minusMinutes(5)))).willReturn(true);
         given(mailOutboxRepository.findById(anyLong())).willReturn(Optional.of(mail()));
         willThrow(new DataAccessResourceFailureException("db down")).willDoNothing()
                 .given(mailOutboxRecorder).markSent(anyLong(), eq(NOW));
 
         // when
-        mailRelay.dispatchDue();
+        mailRelay.dispatchSafely(1L);
+        mailRelay.dispatchSafely(2L);
 
         // then
         verify(mailOutboxRecorder).markSent(2L, NOW);
