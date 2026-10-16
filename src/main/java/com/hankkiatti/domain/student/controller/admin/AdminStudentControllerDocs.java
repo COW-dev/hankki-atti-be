@@ -8,30 +8,32 @@ import com.hankkiatti.domain.student.dto.response.AdminStudentCreateResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentCredentialMailResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentDeactivationPreviewResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentInfoResponseDto;
-import com.hankkiatti.domain.student.dto.response.AdminStudentSummaryResponseDto;
+import com.hankkiatti.domain.student.dto.response.AdminStudentsResponseDto;
 import com.hankkiatti.domain.student.entity.DisabilityType;
 import com.hankkiatti.global.response.ApiResult;
 import com.hankkiatti.global.security.AuthPrincipal;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import java.util.List;
 import org.springframework.http.ResponseEntity;
 
 @Tag(name = "관리자 장애학생", description = "관리자 장애학생 관리 API")
 public interface AdminStudentControllerDocs {
 
     @Operation(summary = "장애학생 목록", description = """
-            이름·학번으로 검색하고 계정 상태로 필터링합니다. 전체 권한 관리자는 장애 유형 필터와 마스킹된 연락처를 함께 사용합니다.
+            이름·학번으로 검색하고 계정 상태로 필터링합니다. 이름·학번순 20명씩 페이지로 줍니다.
+            전체 권한 관리자는 장애 유형 필터와 마스킹된 연락처를 함께 사용합니다.
             제한 권한 관리자에게는 이름·학번·상태·최근 신청만 제공하며 장애 유형 필터를 허용하지 않습니다.
             """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "제한 권한의 장애 유형 필터 요청")
-    ResponseEntity<ApiResult<List<AdminStudentSummaryResponseDto>>> getStudents(
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "422", description = "STUDENT_INVALID_PAGE — page가 0보다 작음")
+    ResponseEntity<ApiResult<AdminStudentsResponseDto>> getStudents(
             @Parameter(hidden = true) AuthPrincipal principal,
-            @Parameter(description = "이름 또는 학번 검색어") String keyword,
+            @Parameter(description = "이름·학번 검색어 (부분 일치)", example = "김한") String q,
             @Parameter(description = "장애 유형 필터 (전체 권한만)") DisabilityType disabilityType,
-            @Parameter(description = "계정 상태 필터") AccountStatus status);
+            @Parameter(description = "계정 상태 필터 (없으면 전체)", example = "ACTIVE") AccountStatus status,
+            @Parameter(description = "페이지 (0부터, 기본 0)", example = "0") int page);
 
     @Operation(summary = "장애학생 정보 수정", description = "전체 권한 관리자가 이름·연락처·학교 이메일·장애 정보를 수정합니다. 학번은 바꾸지 않습니다.")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "수정 성공")
@@ -44,7 +46,8 @@ public interface AdminStudentControllerDocs {
 
     @Operation(summary = "장애학생 계정정보 재발송", description = """
             전체 권한 관리자가 새 초기 비밀번호를 만들고 학교 이메일로 계정정보를 다시 보냅니다.
-            기존 로그인 토큰과 비밀번호 재설정 링크는 무효가 되며, 메일 발송 중에는 중복 요청할 수 없습니다.
+            등록 직후 발송 실패(FAILED)와 이미 받은(SENT) 장애학생 모두 이 API로 다시 보냅니다 — 학생이 바꿔 둔 비밀번호는 무효가 됩니다.
+            기존 로그인 토큰과 비밀번호 재설정 링크도 무효가 되며, 메일 발송 중(PENDING)에는 중복 요청할 수 없습니다.
             """)
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "재발송 요청 성공")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "전체 권한 관리자만 사용 가능")
@@ -98,13 +101,4 @@ public interface AdminStudentControllerDocs {
     ResponseEntity<ApiResult<AdminStudentCreateResponseDto>> create(
             @Parameter(hidden = true) AuthPrincipal principal,
             AdminStudentCreateRequestDto request);
-
-    @Operation(summary = "장애학생 계정정보 메일 다시 보내기", description = "전체 권한 관리자가 발송 실패 상태의 계정정보 메일을 새 임시 비밀번호로 다시 보냅니다.")
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "재발송 요청 성공")
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "전체 권한 관리자만 사용 가능")
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "장애학생 없음")
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "발송 실패 상태가 아님")
-    ResponseEntity<ApiResult<AdminStudentCredentialMailResponseDto>> retryCredentialMail(
-            @Parameter(hidden = true) AuthPrincipal principal,
-            Long studentAccountId);
 }

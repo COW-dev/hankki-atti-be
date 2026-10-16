@@ -30,6 +30,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.dao.DataIntegrityViolationException;
 
 @DataJpaTest
@@ -140,15 +142,20 @@ class DomainRepositoryTest {
         flushAndClear();
 
         // when
-        List<Student> byName = studentRepository.search(
-                "김학", DisabilityType.VISUAL, AccountStatus.ACTIVE);
-        List<Student> byStudentNo = studentRepository.search(
-                "9999", DisabilityType.HEARING, AccountStatus.INACTIVE);
+        Page<Student> byName = studentRepository.search(
+                "%김학%", DisabilityType.VISUAL, AccountStatus.ACTIVE, PageRequest.of(0, 20));
+        Page<Student> byStudentNo = studentRepository.search(
+                "%9999%", DisabilityType.HEARING, AccountStatus.INACTIVE, PageRequest.of(0, 20));
+        Page<Student> all = studentRepository.search(null, null, null, PageRequest.of(0, 1));
 
         // then
         assertThat(byName).extracting(Student::getAccountId).containsExactly(active.getAccountId());
         assertThat(byStudentNo).extracting(Student::getAccountId).containsExactly(inactive.getAccountId());
         assertThat(byName).allSatisfy(student -> assertThat(Hibernate.isInitialized(student.getAccount())).isTrue());
+        // 이름순(김학생 → 박학생), 한 페이지 1명이면 전체 2명·2페이지
+        assertThat(all.getContent()).extracting(Student::getName).containsExactly("김학생");
+        assertThat(all.getTotalElements()).isEqualTo(2);
+        assertThat(all.getTotalPages()).isEqualTo(2);
     }
 
     @Test

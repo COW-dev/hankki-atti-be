@@ -44,6 +44,7 @@ import com.hankkiatti.domain.student.dto.response.AdminStudentCredentialMailResp
 import com.hankkiatti.domain.student.dto.response.AdminStudentDeactivationPreviewResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentInfoResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentSummaryResponseDto;
+import com.hankkiatti.domain.student.dto.response.AdminStudentsResponseDto;
 import com.hankkiatti.domain.student.entity.CredentialMailStatus;
 import com.hankkiatti.domain.student.entity.DisabilityType;
 import com.hankkiatti.domain.student.entity.Student;
@@ -68,6 +69,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -215,17 +218,22 @@ class AdminStudentServiceTest {
         StudentRecentRequestProjection projection = mock(StudentRecentRequestProjection.class);
         given(projection.getStudentAccountId()).willReturn(10L);
         given(projection.getRecentRequestAt()).willReturn(recentRequestAt);
-        given(studentRepository.search("김", DisabilityType.PHYSICAL, AccountStatus.ACTIVE))
-                .willReturn(List.of(student));
+        given(studentRepository.search("%김%", DisabilityType.PHYSICAL, AccountStatus.ACTIVE,
+                PageRequest.of(0, AdminStudentService.PAGE_SIZE)))
+                .willReturn(new PageImpl<>(List.of(student), PageRequest.of(0, AdminStudentService.PAGE_SIZE), 1));
         given(helpRequestRepository.findRecentRequestAtByStudentIds(List.of(10L)))
                 .willReturn(List.of(projection));
 
         // when
-        List<AdminStudentSummaryResponseDto> result = adminStudentService.getStudents(
-                ADMIN_ID, " 김 ", DisabilityType.PHYSICAL, AccountStatus.ACTIVE);
+        AdminStudentsResponseDto result = adminStudentService.getStudents(
+                ADMIN_ID, " 김 ", DisabilityType.PHYSICAL, AccountStatus.ACTIVE, 0);
 
         // then
-        assertThat(result).singleElement().satisfies(item -> {
+        assertThat(result.page()).isZero();
+        assertThat(result.size()).isEqualTo(20);
+        assertThat(result.totalCount()).isEqualTo(1);
+        assertThat(result.totalPages()).isEqualTo(1);
+        assertThat(result.students()).singleElement().satisfies(item -> {
             assertThat(item.accountId()).isEqualTo(10L);
             assertThat(item.name()).isEqualTo("김한끼");
             assertThat(item.disabilityType()).isEqualTo(DisabilityType.PHYSICAL);
@@ -242,11 +250,18 @@ class AdminStudentServiceTest {
         // given
         given(adminRepository.findById(ADMIN_ID)).willReturn(Optional.of(admin(AdminGrade.LIMITED)));
         Student student = student(studentAccount(10L));
-        given(studentRepository.search(null, null, null)).willReturn(List.of(student));
+        given(studentRepository.search(null, null, null, PageRequest.of(1, AdminStudentService.PAGE_SIZE)))
+                .willReturn(new PageImpl<>(List.of(student), PageRequest.of(1, AdminStudentService.PAGE_SIZE), 21));
         given(helpRequestRepository.findRecentRequestAtByStudentIds(List.of(10L))).willReturn(List.of());
 
         // when
-        AdminStudentSummaryResponseDto result = adminStudentService.getStudents(ADMIN_ID, null, null, null).get(0);
+        AdminStudentsResponseDto page = adminStudentService.getStudents(ADMIN_ID, " ", null, null, 1);
+        AdminStudentSummaryResponseDto result = page.students().get(0);
+
+        // then — 빈 검색어는 검색 안 함, 두 번째 페이지
+        assertThat(page.page()).isEqualTo(1);
+        assertThat(page.totalCount()).isEqualTo(21);
+        assertThat(page.totalPages()).isEqualTo(2);
 
         // then
         assertThat(result.name()).isEqualTo("김한끼");
@@ -266,10 +281,22 @@ class AdminStudentServiceTest {
 
         // when & then
         assertThatThrownBy(() -> adminStudentService.getStudents(
-                ADMIN_ID, null, DisabilityType.VISUAL, null))
+                ADMIN_ID, null, DisabilityType.VISUAL, null, 0))
                 .isInstanceOf(AuthException.class)
                 .extracting("errorCode").isEqualTo(AuthErrorType.ACCESS_DENIED);
-        verify(studentRepository, never()).search(any(), any(), any());
+        verify(studentRepository, never()).search(any(), any(), any(), any());
+    }
+
+    @Test
+    void getStudents_음수페이지_INVALID_PAGE() {
+        // given
+        givenFullAdmin();
+
+        // when & then
+        assertThatThrownBy(() -> adminStudentService.getStudents(ADMIN_ID, null, null, null, -1))
+                .isInstanceOf(StudentException.class)
+                .extracting("errorCode").isEqualTo(StudentErrorType.INVALID_PAGE);
+        verify(studentRepository, never()).search(any(), any(), any(), any());
     }
 
     @Test
@@ -607,7 +634,7 @@ class AdminStudentServiceTest {
     }
 
     @Test
-    void retryCredentialMail_발송실패학생_새임시비밀번호를발급하고메일을다시적재한다() {
+    void resendCredentialMail_발송실패학생_새임시비밀번호를발급하고메일을다시적재한다() {
         // given
         givenFullAdmin();
         Account account = studentAccount(10L);
@@ -617,7 +644,7 @@ class AdminStudentServiceTest {
         given(passwordEncoder.encode(anyString())).willReturn("new-temporary-password-hash");
 
         // when
-        AdminStudentCredentialMailResponseDto result = adminStudentService.retryCredentialMail(ADMIN_ID, 10L);
+        AdminStudentCredentialMailResponseDto result = adminStudentService.resendCredentialMail(ADMIN_ID, 10L);
 
         // then
         assertThat(account.getPasswordHash()).isEqualTo("new-temporary-password-hash");
@@ -633,30 +660,6 @@ class AdminStudentServiceTest {
 
         assertThat(result.accountId()).isEqualTo(10L);
         assertThat(result.credentialMailStatus()).isEqualTo(CredentialMailStatus.PENDING);
-    }
-
-    @Test
-    void retryCredentialMail_발송실패상태가아니면_CREDENTIAL_MAIL_NOT_FAILED() {
-        // given
-        givenFullAdmin();
-        Account account = studentAccount(10L);
-        Student student = new Student(
-                account,
-                "김한끼",
-                "60261234",
-                "010-1234-5678",
-                "hankki_student",
-                "student@mju.ac.kr",
-                DisabilityType.PHYSICAL,
-                null);
-        given(accountRepository.findByIdForUpdate(10L)).willReturn(Optional.of(account));
-        given(studentRepository.findByIdForUpdate(10L)).willReturn(Optional.of(student));
-
-        // when & then
-        assertThatThrownBy(() -> adminStudentService.retryCredentialMail(ADMIN_ID, 10L))
-                .isInstanceOf(StudentException.class)
-                .extracting("errorCode").isEqualTo(StudentErrorType.CREDENTIAL_MAIL_NOT_FAILED);
-        verify(mailOutboxService, never()).enqueue(any(), anyString(), anyString(), anyString(), any());
     }
 
     @Test

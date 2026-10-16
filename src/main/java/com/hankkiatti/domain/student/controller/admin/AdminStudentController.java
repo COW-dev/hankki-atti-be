@@ -8,7 +8,7 @@ import com.hankkiatti.domain.student.dto.response.AdminStudentCreateResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentCredentialMailResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentDeactivationPreviewResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentInfoResponseDto;
-import com.hankkiatti.domain.student.dto.response.AdminStudentSummaryResponseDto;
+import com.hankkiatti.domain.student.dto.response.AdminStudentsResponseDto;
 import com.hankkiatti.domain.student.entity.DisabilityType;
 import com.hankkiatti.domain.student.service.AdminStudentService;
 import com.hankkiatti.global.response.ApiResponse;
@@ -16,7 +16,6 @@ import com.hankkiatti.global.response.ApiResult;
 import com.hankkiatti.global.response.type.SuccessType;
 import com.hankkiatti.global.security.AuthPrincipal;
 import jakarta.validation.Valid;
-import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -38,13 +37,14 @@ public class AdminStudentController implements AdminStudentControllerDocs {
 
     @Override
     @GetMapping
-    public ResponseEntity<ApiResult<List<AdminStudentSummaryResponseDto>>> getStudents(
+    public ResponseEntity<ApiResult<AdminStudentsResponseDto>> getStudents(
             @AuthenticationPrincipal AuthPrincipal principal,
-            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String q,
             @RequestParam(required = false) DisabilityType disabilityType,
-            @RequestParam(required = false) AccountStatus status) {
+            @RequestParam(required = false) AccountStatus status,
+            @RequestParam(defaultValue = "0") int page) {
         return ApiResponse.of(SuccessType.SUCCESS,
-                adminStudentService.getStudents(principal.accountId(), keyword, disabilityType, status));
+                adminStudentService.getStudents(principal.accountId(), q, disabilityType, status, page));
     }
 
     @Override
@@ -58,7 +58,7 @@ public class AdminStudentController implements AdminStudentControllerDocs {
     }
 
     @Override
-    @PostMapping("/{studentAccountId}/credential-mail/resend")
+    @PostMapping("/{studentAccountId}/credentials")
     public ResponseEntity<ApiResult<AdminStudentCredentialMailResponseDto>> resendCredentialMail(
             @AuthenticationPrincipal AuthPrincipal principal,
             @PathVariable Long studentAccountId) {
@@ -76,7 +76,7 @@ public class AdminStudentController implements AdminStudentControllerDocs {
     }
 
     @Override
-    @PatchMapping("/{studentAccountId}/deactivate")
+    @PostMapping("/{studentAccountId}/deactivate")
     public ResponseEntity<ApiResult<AdminStudentAccountStatusResponseDto>> deactivate(
             @AuthenticationPrincipal AuthPrincipal principal,
             @PathVariable Long studentAccountId) {
@@ -85,7 +85,7 @@ public class AdminStudentController implements AdminStudentControllerDocs {
     }
 
     @Override
-    @PatchMapping("/{studentAccountId}/activate")
+    @PostMapping("/{studentAccountId}/activate")
     public ResponseEntity<ApiResult<AdminStudentAccountStatusResponseDto>> activate(
             @AuthenticationPrincipal AuthPrincipal principal,
             @PathVariable Long studentAccountId) {
@@ -99,14 +99,5 @@ public class AdminStudentController implements AdminStudentControllerDocs {
             @AuthenticationPrincipal AuthPrincipal principal,
             @Valid @RequestBody AdminStudentCreateRequestDto request) {
         return ApiResponse.of(SuccessType.CREATED, adminStudentService.create(principal.accountId(), request));
-    }
-
-    @Override
-    @PostMapping("/{studentAccountId}/credential-mail/retry")
-    public ResponseEntity<ApiResult<AdminStudentCredentialMailResponseDto>> retryCredentialMail(
-            @AuthenticationPrincipal AuthPrincipal principal,
-            @PathVariable Long studentAccountId) {
-        return ApiResponse.of(SuccessType.SUCCESS,
-                adminStudentService.retryCredentialMail(principal.accountId(), studentAccountId));
     }
 }

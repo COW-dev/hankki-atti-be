@@ -4,8 +4,9 @@ import com.hankkiatti.domain.account.entity.AccountStatus;
 import com.hankkiatti.domain.student.entity.DisabilityType;
 import com.hankkiatti.domain.student.entity.Student;
 import jakarta.persistence.LockModeType;
-import java.util.List;
 import java.util.Optional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
@@ -15,17 +16,24 @@ public interface StudentRepository extends JpaRepository<Student, Long> {
 
     boolean existsByStudentNo(String studentNo);
 
-    @Query("""
+    /**
+     * 관리자 장애학생 목록. 조건이 null이면 거르지 않는다. pattern은 이름·학번 부분 일치(%q%, 이름은 대소문자 무시). 이름·학번순.
+     */
+    @Query(value = """
             select s from Student s join fetch s.account a
-            where (:keyword is null
-                    or lower(s.name) like lower(concat('%', :keyword, '%'))
-                    or s.studentNo like concat('%', :keyword, '%'))
+            where (:pattern is null or lower(s.name) like lower(:pattern) or s.studentNo like :pattern)
               and (:disabilityType is null or s.disabilityType = :disabilityType)
               and (:status is null or a.status = :status)
-            order by s.name, s.studentNo""")
-    List<Student> search(@Param("keyword") String keyword,
+            order by s.name, s.studentNo""",
+            countQuery = """
+            select count(s) from Student s join s.account a
+            where (:pattern is null or lower(s.name) like lower(:pattern) or s.studentNo like :pattern)
+              and (:disabilityType is null or s.disabilityType = :disabilityType)
+              and (:status is null or a.status = :status)""")
+    Page<Student> search(@Param("pattern") String pattern,
                          @Param("disabilityType") DisabilityType disabilityType,
-                         @Param("status") AccountStatus status);
+                         @Param("status") AccountStatus status,
+                         Pageable pageable);
 
     /**
      * 장애학생 행을 잠그고 가져온다. 같은 장애학생의 신청 생성은 이 락으로 한 줄로 선다.

@@ -106,7 +106,7 @@ domain/
 ├── mail/         MailOutbox, 메일 아웃박스 적재·발송(MailOutboxService, MailRelay)
 ├── sms/          SmsOutbox, 문자 아웃박스 적재·발송(SmsOutboxService, SmsRelay), 발송부 SmsSender(AWS SNS 구현 SnsSmsSender), 문자 수신 동의 이력(SmsConsentChange·SmsConsentHistory)
 ├── notification/ Notification, NotificationType, NotificationTargetType, 인앱 알림 저장(NotificationService.notify)·목록(커서)·안 읽은 개수·읽음 API, 매칭·취소 이벤트 → 알림 작업 아웃박스(NotificationJob — NotificationJobRecorder가 업무 트랜잭션 안에서 저장 → NotificationJobRelay·Poller가 처리 → NotificationDispatcher, 문구는 `messages/notification.properties` — 키 = 알림 종류, NotificationMessages가 채운다)
-├── student/      Student, DisabilityType, CredentialMailStatus, 관리자 장애학생 등록(AdminStudentService), 장애학생 상세 3탭 — 정보·매칭현황·취소·노쇼 이력(AdminStudentDetailService, 등급별 프로필 DTO)
+├── student/      Student, DisabilityType, CredentialMailStatus, 관리자 장애학생 등록·목록(q·page, 이름순 20명)·정보 수정·계정정보 재발송(`POST /credentials` — 발송 중만 차단, 새 초기 비밀번호 발급)·비활성화 미리보기·비활성화·재활성화(AdminStudentService — 전체 권한, 목록만 등급별 응답), 장애학생 상세 3탭 — 정보·매칭현황·취소·노쇼 이력(AdminStudentDetailService, 등급별 프로필 DTO)
 ├── helper/       Helper, 도우미 회원가입(HelperSignupService, 공개 경로 `/api/helpers/signup`), 관리자 도우미 목록·상세·활동 이력·임시 비밀번호 발송(AdminHelperService — 두 등급 같은 응답, 목록 전화번호는 가림), 관리자 도우미 비활성화·미리보기·재활성화(AdminHelperDeactivationService — 계정 트랜잭션 HelperAccountService 뒤 지원마다 HelperDeactivationCanceler로 해제, 다시 보내면 남은 건만)
 ├── admin/        Admin, AdminGrade
 ├── notice/       Notice, NoticeTarget(전체·장애학생·도우미·아띠), 관리자 공지 목록·상세·작성·수정·삭제(AdminNoticeService — 작성·수정·삭제는 전체 권한, 10초 안 같은 제목 재게시 차단, 소프트 삭제), 사용자 공지 목록·상세(NoticeService — 역할·아띠 소속별 대상), 게시 시 NoticePublishedEvent → 대상 전원 인앱 알림(NOTICE_PUBLISHED, 수정은 재알림 없음)
