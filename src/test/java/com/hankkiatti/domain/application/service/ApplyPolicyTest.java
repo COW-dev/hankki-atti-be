@@ -28,6 +28,12 @@ class ApplyPolicyTest {
         return request;
     }
 
+    private HelpRequest matchedRequest(Long id, LocalDateTime startAt) {
+        HelpRequest request = request(id, startAt);
+        request.match(APPLIED_AT);
+        return request;
+    }
+
     private Application waiting(HelpRequest request) {
         return new Application(request, helper, APPLIED_AT);
     }
@@ -41,7 +47,7 @@ class ApplyPolicyTest {
     @Test
     void blockReason_진행중지원없고겹침없음_null() {
         // when & then
-        assertThat(applyPolicy.blockReason(request(1L, NOON), List.of())).isNull();
+        assertThat(applyPolicy.blockReason(request(1L, NOON), List.of(), 0)).isNull();
     }
 
     @Test
@@ -50,7 +56,7 @@ class ApplyPolicyTest {
         HelpRequest target = request(1L, NOON);
 
         // when & then
-        assertThat(applyPolicy.blockReason(target, List.of(waiting(target))))
+        assertThat(applyPolicy.blockReason(target, List.of(waiting(target)), 0))
                 .isEqualTo(ApplyBlockReason.ALREADY_APPLIED);
     }
 
@@ -61,15 +67,45 @@ class ApplyPolicyTest {
         HelpRequest other = request(2L, NOON);
 
         // when & then
-        assertThat(applyPolicy.blockReason(target, List.of(matched(other)))).isEqualTo(ApplyBlockReason.TIME_OVERLAP);
-        assertThat(applyPolicy.blockReason(target, List.of(waiting(other)))).isNull();
+        assertThat(applyPolicy.blockReason(target, List.of(matched(other)), 0)).isEqualTo(ApplyBlockReason.TIME_OVERLAP);
+        assertThat(applyPolicy.blockReason(target, List.of(waiting(other)), 0)).isNull();
     }
 
     @Test
     void blockReason_매칭끝과시작이같음_겹치지않음() {
         // when & then — 12:00~13:00 매칭, 13:00 신청
-        assertThat(applyPolicy.blockReason(request(1L, NOON.plusHours(1)), List.of(matched(request(2L, NOON)))))
+        assertThat(applyPolicy.blockReason(request(1L, NOON.plusHours(1)), List.of(matched(request(2L, NOON))), 0))
                 .isNull();
+    }
+
+    @Test
+    void blockReason_매칭된신청예비3명_WAITING_FULL이고2명이면null() {
+        // given
+        HelpRequest target = matchedRequest(1L, NOON);
+
+        // when & then
+        assertThat(applyPolicy.blockReason(target, List.of(), ApplyPolicy.MAX_WAITING))
+                .isEqualTo(ApplyBlockReason.WAITING_FULL);
+        assertThat(applyPolicy.blockReason(target, List.of(), ApplyPolicy.MAX_WAITING - 1)).isNull();
+    }
+
+    @Test
+    void blockReason_모집중신청_예비수와무관하게null() {
+        // when & then — 모집 중이면 바로 매칭이라 예비 상한을 보지 않는다
+        assertThat(applyPolicy.blockReason(request(1L, NOON), List.of(), ApplyPolicy.MAX_WAITING)).isNull();
+    }
+
+    @Test
+    void blockReason_예비가다찼고재지원이거나겹침_도우미본인사유가먼저() {
+        // given
+        HelpRequest target = matchedRequest(1L, NOON);
+        HelpRequest other = matchedRequest(2L, NOON.plusMinutes(30));
+
+        // when & then
+        assertThat(applyPolicy.blockReason(target, List.of(waiting(target)), ApplyPolicy.MAX_WAITING))
+                .isEqualTo(ApplyBlockReason.ALREADY_APPLIED);
+        assertThat(applyPolicy.blockReason(target, List.of(matched(other)), ApplyPolicy.MAX_WAITING))
+                .isEqualTo(ApplyBlockReason.TIME_OVERLAP);
     }
 
     @Test

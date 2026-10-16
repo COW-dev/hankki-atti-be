@@ -4,6 +4,7 @@ import com.hankkiatti.domain.application.entity.Application;
 import com.hankkiatti.domain.application.entity.ApplyBlockReason;
 import com.hankkiatti.domain.application.entity.ApplyOutcome;
 import com.hankkiatti.domain.application.repository.ApplicationRepository;
+import com.hankkiatti.domain.application.repository.HelpRequestApplicationCount;
 import com.hankkiatti.domain.application.service.ApplyPolicy;
 import com.hankkiatti.domain.auth.exception.AuthErrorType;
 import com.hankkiatti.domain.auth.exception.AuthException;
@@ -52,10 +53,12 @@ public class OpenHelpRequestService {
 
         List<HelpRequest> requests = helpRequestRepository.findOpen(range.startInclusive(), range.endExclusive(), now);
         List<Application> myActive = applicationRepository.findActiveWithHelpRequestByHelperId(accountId);
+        Map<Long, Long> waitingCounts = waitingCounts(requests);
 
         Map<LocalDate, List<OpenHelpRequestResponseDto>> byDate = requests.stream()
                 .collect(Collectors.groupingBy(request -> request.getStartAt().toLocalDate(), LinkedHashMap::new,
-                        Collectors.mapping(request -> toCard(request, myActive), Collectors.toList())));
+                        Collectors.mapping(request -> toCard(request, myActive,
+                                waitingCounts.getOrDefault(request.getId(), 0L)), Collectors.toList())));
         return byDate.entrySet().stream()
                 .map(entry -> new OpenHelpRequestDateResponseDto(entry.getKey(), entry.getValue()))
                 .toList();
@@ -67,8 +70,21 @@ public class OpenHelpRequestService {
         }
     }
 
-    private OpenHelpRequestResponseDto toCard(HelpRequest request, List<Application> myActive) {
-        ApplyBlockReason blockReason = applyPolicy.blockReason(request, myActive);
+    // 매칭된 신청의 예비 인원 (예비 상한 판단용). 응답에는 넣지 않는다 — 블라인드
+    private Map<Long, Long> waitingCounts(List<HelpRequest> requests) {
+        List<Long> matchedIds = requests.stream()
+                .filter(request -> request.getStatus() == HelpRequestStatus.MATCHED)
+                .map(HelpRequest::getId)
+                .toList();
+        if (matchedIds.isEmpty()) {
+            return Map.of();
+        }
+        return applicationRepository.countWaitingByHelpRequest(matchedIds).stream()
+                .collect(Collectors.toMap(HelpRequestApplicationCount::helpRequestId, HelpRequestApplicationCount::count));
+    }
+
+    private OpenHelpRequestResponseDto toCard(HelpRequest request, List<Application> myActive, long waitingCount) {
+        ApplyBlockReason blockReason = applyPolicy.blockReason(request, myActive, waitingCount);
         ApplyOutcome outcome = blockReason != null ? ApplyOutcome.BLOCKED
                 : request.getStatus() == HelpRequestStatus.RECRUITING ? ApplyOutcome.MATCH
                 : ApplyOutcome.WAITING;

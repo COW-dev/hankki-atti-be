@@ -212,6 +212,54 @@ class ApplicationServiceTest {
     }
 
     @Test
+    void apply_예비2명인매칭신청_예비3번() {
+        // given
+        HelpRequest request = matchedRequest(REQUEST_ID, NOON);
+        givenLocked(request);
+        givenMyActive();
+        given(applicationRepository.countByHelpRequestIdAndStatus(REQUEST_ID, ApplicationStatus.WAITING)).willReturn(2L);
+        givenSaveAssignsId();
+
+        // when
+        ApplyResponseDto result = applicationService.apply(HELPER_ID, REQUEST_ID);
+
+        // then
+        assertThat(result.status()).isEqualTo(ApplicationStatus.WAITING);
+        assertThat(result.waitingOrder()).isEqualTo(3);
+    }
+
+    @Test
+    void apply_예비3명인매칭신청_WAITING_FULL이고지원을만들지않음() {
+        // given
+        HelpRequest request = matchedRequest(REQUEST_ID, NOON);
+        givenLocked(request);
+        givenMyActive();
+        given(applicationRepository.countByHelpRequestIdAndStatus(REQUEST_ID, ApplicationStatus.WAITING)).willReturn(3L);
+
+        // when & then
+        assertApplicationError(() -> applicationService.apply(HELPER_ID, REQUEST_ID),
+                ApplicationErrorType.WAITING_FULL);
+        verify(applicationRepository, never()).save(any());
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    void apply_모집중신청_예비수를세지않고바로매칭() {
+        // given
+        HelpRequest request = request(REQUEST_ID, NOON);
+        givenLocked(request);
+        givenMyActive();
+        givenSaveAssignsId();
+
+        // when
+        ApplyResponseDto result = applicationService.apply(HELPER_ID, REQUEST_ID);
+
+        // then
+        assertThat(result.status()).isEqualTo(ApplicationStatus.MATCHED);
+        verify(applicationRepository, never()).countByHelpRequestIdAndStatus(any(), any());
+    }
+
+    @Test
     void apply_시작시각이지났거나취소된신청_NOT_OPEN() {
         // given — 시작 = 지금
         HelpRequest started = request(REQUEST_ID, NOW);

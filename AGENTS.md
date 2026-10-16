@@ -111,7 +111,7 @@ domain/
 ├── admin/        Admin, AdminGrade
 ├── notice/       Notice, NoticeTarget(전체·장애학생·도우미·아띠), 관리자 공지 목록·상세·작성·수정·삭제(AdminNoticeService — 작성·수정·삭제는 전체 권한, 10초 안 같은 제목 재게시 차단, 소프트 삭제), 사용자 공지 목록·상세(NoticeService — 역할·아띠 소속별 대상), 게시 시 NoticePublishedEvent → 대상 전원 인앱 알림(NOTICE_PUBLISHED, 수정은 재알림 없음)
 ├── helprequest/  HelpRequest, HelpType, HelpRequestStatus, RequestCancelType, Meal, 신청 가능 날짜·시각(HelpRequestSchedule), 신청·철회·장애학생 매칭 취소·노쇼 신고(HelpRequestService — 매칭 취소는 HelpRequestCanceledByStudentEvent 발행), 관리자 전체 신청 현황·요약(AdminHelpRequestService — 등급별 DTO), 조회 기간 규칙(HelpRequestDateRange), 식사 시작·종료 자동 처리(MealTimeJob)
-└── application/  Application, ApplicationStatus(ACTIVE·CONFIRMED), CancelReason, ApplicationAfterAction, 지원(ApplicationService), 도우미 매칭 취소·예비 빠지기(HelperCancelService), 다음 예비 승격·모집 재개(WaitingPromoter — 취소·승격 거절·응답 마감이 같이 씀), 식사 1시간 이내 승격의 수락·거절·응답 마감 자동 거절(PromotionResponseService), 매칭 현황 조회(MyApplicationService, MyApplicationFilter), 확정 매칭 시 겹치는 다른 예비 자동 제외(HelperConfirmedEvent → OverlappingWaitExcluder), 지원 가능 규칙(ApplyPolicy — 요청 목록 카드·지원 검증·승격 후보 확인이 같이 씀), 지원 결과 예상 ApplyOutcome·ApplyBlockReason(저장 안 함), 관리자 봉사시간 수정(AdminVolunteerHourService — 전체 권한, 이용 완료·노쇼 건, 0.5 단위, 이력 VolunteerHourChange), 관리자 비활성화의 지원 한 건 해제(HelperDeactivationCanceler)
+└── application/  Application, ApplicationStatus(ACTIVE·CONFIRMED), CancelReason, ApplicationAfterAction, 지원(ApplicationService), 도우미 매칭 취소·예비 빠지기(HelperCancelService), 다음 예비 승격·모집 재개(WaitingPromoter — 취소·승격 거절·응답 마감이 같이 씀), 식사 1시간 이내 승격의 수락·거절·응답 마감 자동 거절(PromotionResponseService), 매칭 현황 조회(MyApplicationService, MyApplicationFilter), 확정 매칭 시 겹치는 다른 예비 자동 제외(HelperConfirmedEvent → OverlappingWaitExcluder), 지원 가능 규칙(ApplyPolicy — 재지원·시간 겹침·예비 상한 3명, 요청 목록 카드·지원 검증·승격 후보 확인이 같이 씀), 지원 결과 예상 ApplyOutcome·ApplyBlockReason(저장 안 함), 관리자 봉사시간 수정(AdminVolunteerHourService — 전체 권한, 이용 완료·노쇼 건, 0.5 단위, 이력 VolunteerHourChange), 관리자 비활성화의 지원 한 건 해제(HelperDeactivationCanceler)
 ```
 - `Student`·`Helper`·`Admin`은 `Account`와 PK를 공유하는 1:1 프로필이다 (`@MapsId`)
 
@@ -339,8 +339,8 @@ public class HelpRequest extends BaseTimeEntity {
 
 기능명세서에서 코드 설계에 직접 영향을 주는 규칙만 추렸다. 상세는 Notion 기능명세서·유저플로우를 따른다.
 
-- **선착순 즉시 매칭** — 신청 건에 처음 지원한 도우미가 바로 매칭되고, 이후 지원자는 예비 1·2·3번. 동시 지원은 서버 도착 순이므로 매칭 처리는 **반드시 락(비관적 락 등)이나 유니크 제약으로 동시성을 보장**한다
-- **블라인드** — 매칭 전에는 도우미 응답에 장애학생 개인정보(이름·학번·연락처·장애 유형 등)를 **응답 DTO에서 아예 제외**한다. 프론트에서 숨기는 방식 금지. 요청 목록(`OpenHelpRequestService`)은 신청 ID·시각·도움 유형만 주고, 기타 도움 내용·메모(장애 관련 내용이 들어갈 수 있다)·예비 인원도 주지 않는다. 카드마다 지금 지원하면 어떻게 되는지(`ApplyOutcome`: 바로 매칭·예비·불가 + `ApplyBlockReason`)를 함께 준다 — 재지원 불가는 진행 중 지원(`ApplicationStatus.ACTIVE`), 시간 겹침 차단은 확정 매칭(`CONFIRMED` = 매칭 완료·승격 응답 대기) 기준이고 예비끼리 겹치는 건 막지 않는다
+- **선착순 즉시 매칭** — 신청 건에 처음 지원한 도우미가 바로 매칭되고, 이후 지원자는 예비 1·2·3번 — **예비는 최대 3명**(`ApplyPolicy.MAX_WAITING`, 승격 응답 대기는 세지 않음)이고 다 차면 409 `APPLICATION_WAITING_FULL`. 동시 지원은 서버 도착 순이므로 매칭 처리는 **반드시 락(비관적 락 등)이나 유니크 제약으로 동시성을 보장**한다
+- **블라인드** — 매칭 전에는 도우미 응답에 장애학생 개인정보(이름·학번·연락처·장애 유형 등)를 **응답 DTO에서 아예 제외**한다. 프론트에서 숨기는 방식 금지. 요청 목록(`OpenHelpRequestService`)은 신청 ID·시각·도움 유형만 주고, 기타 도움 내용·메모(장애 관련 내용이 들어갈 수 있다)·예비 인원도 주지 않는다. 카드마다 지금 지원하면 어떻게 되는지(`ApplyOutcome`: 바로 매칭·예비·불가 + `ApplyBlockReason`)를 함께 준다 — 재지원 불가는 진행 중 지원(`ApplicationStatus.ACTIVE`), 시간 겹침 차단은 확정 매칭(`CONFIRMED` = 매칭 완료·승격 응답 대기) 기준이고 예비끼리 겹치는 건 막지 않는다. 예비가 다 찬 신청은 숨기지 않고 지원 불가(`WAITING_FULL`)로 보여 준다
 - **장애 정보는 민감정보** — 장애 유형·특이사항은 관리자 API에서만 조회 가능. 로그에 출력하지 않는다
 - **즉시 취소, 관리자 승인 없음** — 매칭된 도우미가 취소하면 예비 1번 자동 승격, 예비가 없으면 모집 재개. 취소 사유·시점은 이력으로 남긴다
 - **1시간 이내 승격은 응답을 받는다** — 식사 1시간 이내에 승격되면 응답 대기(`PROMOTION_PENDING`). 마감은 식사 15분 전이고, 그보다 늦게 승격되면 식사 시작까지 기다린다. 마감이 지나면 자동 거절 → 다음 예비, 식사 시작까지 답이 없으면 매칭 실패. 겹치는 다른 예비 자동 제외는 수락할 때 한다
