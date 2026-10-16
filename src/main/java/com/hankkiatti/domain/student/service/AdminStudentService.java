@@ -29,6 +29,7 @@ import com.hankkiatti.domain.student.dto.response.AdminStudentCredentialMailResp
 import com.hankkiatti.domain.student.dto.response.AdminStudentDeactivationPreviewResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentInfoResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentSummaryResponseDto;
+import com.hankkiatti.domain.student.dto.response.AdminStudentsResponseDto;
 import com.hankkiatti.domain.student.entity.CredentialMailStatus;
 import com.hankkiatti.domain.student.entity.DisabilityType;
 import com.hankkiatti.domain.student.entity.Student;
@@ -46,6 +47,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
@@ -56,6 +59,8 @@ import org.springframework.util.StringUtils;
 @Service
 @RequiredArgsConstructor
 public class AdminStudentService {
+
+    public static final int PAGE_SIZE = 20;
 
     private static final String CREDENTIAL_MAIL_SUBJECT = "[한끼아띠] 장애학생 계정정보 안내";
 
@@ -71,20 +76,30 @@ public class AdminStudentService {
     private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
 
+    /**
+     * 목록 — 이름·학번 검색(q), 장애 유형(전체 권한만)·계정 상태 필터, 이름·학번순 20명씩 (도우미 목록과 같은 페이지 방식).
+     */
     @Transactional(readOnly = true)
-    public List<AdminStudentSummaryResponseDto> getStudents(Long adminAccountId, String keyword,
-                                                            DisabilityType disabilityType, AccountStatus status) {
+    public AdminStudentsResponseDto getStudents(Long adminAccountId, String q, DisabilityType disabilityType,
+                                                AccountStatus status, int page) {
         Admin admin = requireAdmin(adminAccountId);
         if (!admin.isFull() && disabilityType != null) {
             throw new AuthException(AuthErrorType.ACCESS_DENIED,
                     "제한 권한의 장애 유형 필터 요청, adminAccountId=" + adminAccountId);
         }
+        if (page < 0) {
+            throw new StudentException(StudentErrorType.INVALID_PAGE, "page=" + page);
+        }
 
-        List<Student> students = studentRepository.search(trimToNull(keyword), disabilityType, status);
-        Map<Long, LocalDateTime> recentRequestAt = recentRequestAt(students);
-        return students.stream()
+        String pattern = StringUtils.hasText(q) ? "%" + q.trim() + "%" : null;
+        Page<Student> students = studentRepository.search(pattern, disabilityType, status,
+                PageRequest.of(page, PAGE_SIZE));
+        Map<Long, LocalDateTime> recentRequestAt = recentRequestAt(students.getContent());
+        List<AdminStudentSummaryResponseDto> rows = students.stream()
                 .map(student -> toSummary(student, recentRequestAt.get(student.getAccountId()), admin.isFull()))
                 .toList();
+        return new AdminStudentsResponseDto(rows, page, PAGE_SIZE, students.getTotalElements(),
+                students.getTotalPages());
     }
 
     @Transactional
@@ -111,6 +126,10 @@ public class AdminStudentService {
         return toInfo(student);
     }
 
+    /**
+     * 계정정보 재발송 — 등록 직후 발송 실패와 상세 화면의 재발송이 같은 API를 쓴다 (요구사항 POST /credentials).
+     * 발송 중(PENDING)만 막고, 이미 받은 장애학생도 새 초기 비밀번호를 만들어 보낸다 (기존 비밀번호·토큰은 무효).
+     */
     @Transactional
     public AdminStudentCredentialMailResponseDto resendCredentialMail(Long adminAccountId, Long studentAccountId) {
         requireFullAdmin(adminAccountId);
@@ -244,23 +263,6 @@ public class AdminStudentService {
                 student.getSchoolEmail(),
                 student.getDisabilityType(),
                 student.getCredentialMailStatus());
-    }
-
-    @Transactional
-    public AdminStudentCredentialMailResponseDto retryCredentialMail(Long adminAccountId, Long studentAccountId) {
-        requireFullAdmin(adminAccountId);
-
-        Account account = findStudentAccountForUpdate(studentAccountId);
-        Student student = findStudentForUpdate(studentAccountId);
-        if (student.getCredentialMailStatus() != CredentialMailStatus.FAILED) {
-            throw new StudentException(StudentErrorType.CREDENTIAL_MAIL_NOT_FAILED,
-                    "studentAccountId=" + studentAccountId + ", status=" + student.getCredentialMailStatus());
-        }
-
-        issueCredentialMail(account, student);
-        log.info("장애학생 계정정보 메일 재발송 요청: accountId={}", account.getId());
-
-        return toCredentialMailResponse(account, student);
     }
 
     private Account findStudentAccountForUpdate(Long studentAccountId) {

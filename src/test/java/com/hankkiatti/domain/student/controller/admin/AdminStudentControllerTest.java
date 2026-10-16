@@ -8,10 +8,14 @@ import com.hankkiatti.domain.account.entity.AccountRole;
 import com.hankkiatti.domain.account.entity.AccountStatus;
 import com.hankkiatti.domain.auth.entity.TokenAudience;
 import com.hankkiatti.domain.student.dto.response.AdminStudentAccountStatusResponseDto;
+import com.hankkiatti.domain.student.dto.response.AdminStudentCredentialMailResponseDto;
 import com.hankkiatti.domain.student.dto.response.AdminStudentDeactivationPreviewResponseDto;
+import com.hankkiatti.domain.student.dto.response.AdminStudentsResponseDto;
+import com.hankkiatti.domain.student.entity.CredentialMailStatus;
 import com.hankkiatti.domain.student.service.AdminStudentService;
 import com.hankkiatti.global.response.ApiResult;
 import com.hankkiatti.global.security.AuthPrincipal;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -33,6 +37,40 @@ class AdminStudentControllerTest {
 
     @InjectMocks
     private AdminStudentController adminStudentController;
+
+    @Test
+    void getStudents_검색어와페이지_서비스에그대로넘기고한페이지응답반환() {
+        // given
+        AdminStudentsResponseDto expected = new AdminStudentsResponseDto(List.of(), 2, 20, 0L, 0);
+        given(adminStudentService.getStudents(ADMIN_ACCOUNT_ID, "김", null, AccountStatus.ACTIVE, 2))
+                .willReturn(expected);
+
+        // when
+        ResponseEntity<ApiResult<AdminStudentsResponseDto>> response =
+                adminStudentController.getStudents(PRINCIPAL, "김", null, AccountStatus.ACTIVE, 2);
+
+        // then
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().data()).isEqualTo(expected);
+    }
+
+    @Test
+    void resendCredentialMail_관리자요청_재발송응답반환() {
+        // given
+        AdminStudentCredentialMailResponseDto expected = new AdminStudentCredentialMailResponseDto(
+                STUDENT_ACCOUNT_ID, "60261234", "student@mju.ac.kr", CredentialMailStatus.PENDING);
+        given(adminStudentService.resendCredentialMail(ADMIN_ACCOUNT_ID, STUDENT_ACCOUNT_ID)).willReturn(expected);
+
+        // when
+        ResponseEntity<ApiResult<AdminStudentCredentialMailResponseDto>> response =
+                adminStudentController.resendCredentialMail(PRINCIPAL, STUDENT_ACCOUNT_ID);
+
+        // then
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().data()).isEqualTo(expected);
+    }
 
     @Test
     void previewDeactivation_관리자요청_비활성화미리보기응답반환() {
