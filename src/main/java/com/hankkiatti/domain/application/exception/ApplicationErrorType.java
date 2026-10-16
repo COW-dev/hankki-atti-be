@@ -23,6 +23,8 @@ public enum ApplicationErrorType implements ErrorCode {
     ALREADY_APPLIED(409, "이미 지원한 요청입니다."),
     // 확정 매칭(매칭 완료·승격 응답 대기)과 이용 시간이 겹친다
     TIME_OVERLAP(409, "같은 시간에 매칭된 일정이 있습니다."),
+    // 매칭된 신청의 예비가 상한(3명)만큼 찼다
+    WAITING_FULL(409, "예비 인원이 다 찬 요청입니다."),
     // 봉사시간은 0.5시간 단위 (범위 0~10은 요청 검증이 본다)
     INVALID_VOLUNTEER_HOURS(422, "봉사시간은 0.5시간 단위로 입력해 주세요."),
     // 지금 값과 같다 — 의미 없는 수정 이력을 남기지 않는다

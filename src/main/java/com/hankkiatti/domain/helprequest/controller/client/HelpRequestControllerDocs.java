@@ -58,7 +58,8 @@ public interface HelpRequestControllerDocs {
             블라인드 — 신청 ID·시각·도움 유형만 있다. 장애학생 정보, 기타 도움 내용, 메모, 예비 인원은 주지 않는다.
             카드마다 지금 지원하면 어떻게 되는지(applyOutcome)를 준다: 모집 중이면 MATCH(바로 매칭), 매칭 완료면 WAITING(예비 등록).
             BLOCKED(지원 불가)와 이유 blockReason: ALREADY_APPLIED — 이 신청에 내 진행 중 지원(매칭·승격 응답 대기·예비)이 있음,
-            TIME_OVERLAP — 내 확정 매칭(매칭 완료·승격 응답 대기)과 이용 시간이 겹침. 내 예비와 겹치는 건 막지 않는다.""")
+            TIME_OVERLAP — 내 확정 매칭(매칭 완료·승격 응답 대기)과 이용 시간이 겹침. 내 예비와 겹치는 건 막지 않는다,
+            WAITING_FULL — 매칭 완료인 신청의 예비 3명이 다 참. 여러 이유에 걸리면 이 순서대로 앞의 것 하나만 준다.""")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공 (빈 날짜는 없다)")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "COMMON_INVALID_REQUEST — 날짜 형식이 틀림")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "로그인 필요")

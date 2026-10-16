@@ -11,6 +11,7 @@ import com.hankkiatti.domain.application.exception.ApplicationErrorType;
 import com.hankkiatti.domain.application.exception.ApplicationException;
 import com.hankkiatti.domain.application.repository.ApplicationRepository;
 import com.hankkiatti.domain.application.service.ApplicationService;
+import com.hankkiatti.domain.application.service.ApplyPolicy;
 import com.hankkiatti.domain.helper.repository.HelperRepository;
 import com.hankkiatti.domain.helprequest.entity.HelpRequest;
 import com.hankkiatti.domain.helprequest.entity.HelpRequestStatus;
@@ -160,7 +161,7 @@ class ApplicationConcurrencyTest {
     }
 
     @Test
-    void apply_모집중신청에도우미5명동시지원_한명만매칭되고나머지예비1부터4번() throws Exception {
+    void apply_모집중신청에도우미5명동시지원_한명만매칭되고예비는3번까지_나머지WAITING_FULL() throws Exception {
         // given
         Long requestId = saveRequest(tomorrowNoon).getId();
         List<Callable<ApplyResponseDto>> tasks = helperIds.stream()
@@ -170,12 +171,16 @@ class ApplicationConcurrencyTest {
         // when
         List<Object> results = runConcurrently(tasks);
 
-        // then
-        assertThat(failures(results)).isEmpty();
+        // then — 예비 상한 3명: 4번째 예비는 생기지 않는다
         assertThat(successes(results)).filteredOn(result -> result.status() == ApplicationStatus.MATCHED).hasSize(1);
         assertThat(successes(results)).filteredOn(result -> result.status() == ApplicationStatus.WAITING)
                 .extracting(ApplyResponseDto::waitingOrder)
-                .containsExactlyInAnyOrder(1, 2, 3, 4);
+                .containsExactlyInAnyOrder(1, 2, 3);
+        assertThat(failures(results)).singleElement()
+                .isInstanceOf(ApplicationException.class)
+                .extracting("errorCode").isEqualTo(ApplicationErrorType.WAITING_FULL);
+        assertThat(applicationRepository.countByHelpRequestIdAndStatus(requestId, ApplicationStatus.WAITING))
+                .isEqualTo(ApplyPolicy.MAX_WAITING);
         assertThat(helpRequestRepository.findById(requestId).orElseThrow().getStatus())
                 .isEqualTo(HelpRequestStatus.MATCHED);
         assertThat(applicationRepository.findByHelpRequestIdAndStatus(requestId, ApplicationStatus.MATCHED)).hasSize(1);

@@ -30,7 +30,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 도우미 지원 (기능명세서 "요청 목록 · 지원", 요구사항 4.2). 모집 중인 신청에 처음 지원하면 바로 매칭, 이미 매칭된 신청이면 예비 N번.
+ * 도우미 지원 (기능명세서 "요청 목록 · 지원", 요구사항 4.2). 모집 중인 신청에 처음 지원하면 바로 매칭, 이미 매칭된 신청이면 예비 N번(최대 3명).
  */
 @Slf4j
 @Service
@@ -67,7 +67,10 @@ public class ApplicationService {
         }
 
         List<Application> myActive = applicationRepository.findActiveWithHelpRequestByHelperId(helperId);
-        ApplyBlockReason blockReason = applyPolicy.blockReason(request, myActive);
+        // 신청 행을 잠근 뒤 세므로 같은 신청의 동시 지원이 상한을 넘겨 예비를 만들지 않는다. 모집 중이면 예비가 없어 세지 않는다
+        long waitingCount = request.getStatus() == HelpRequestStatus.RECRUITING ? 0
+                : applicationRepository.countByHelpRequestIdAndStatus(helpRequestId, ApplicationStatus.WAITING);
+        ApplyBlockReason blockReason = applyPolicy.blockReason(request, myActive, waitingCount);
         if (blockReason == ApplyBlockReason.ALREADY_APPLIED) {
             throw new ApplicationException(ApplicationErrorType.ALREADY_APPLIED,
                     "helpRequestId=" + helpRequestId + ", helperId=" + helperId);
@@ -75,6 +78,10 @@ public class ApplicationService {
         if (blockReason == ApplyBlockReason.TIME_OVERLAP) {
             throw new ApplicationException(ApplicationErrorType.TIME_OVERLAP,
                     "helpRequestId=" + helpRequestId + ", helperId=" + helperId);
+        }
+        if (blockReason == ApplyBlockReason.WAITING_FULL) {
+            throw new ApplicationException(ApplicationErrorType.WAITING_FULL,
+                    "helpRequestId=" + helpRequestId + ", waitingCount=" + waitingCount);
         }
 
         Application application = new Application(request, helper, now);
@@ -92,9 +99,8 @@ public class ApplicationService {
                     new ApplyStudentResponseDto(student.getName(), student.getKakaoId()));
         }
 
-        // 매칭 완료인 신청 — 지원 순서대로 예비. 상한은 없다 (PM 미정, 2026-10-09)
-        int waitingOrder = (int) applicationRepository.countByHelpRequestIdAndStatus(
-                helpRequestId, ApplicationStatus.WAITING) + 1;
+        // 매칭 완료인 신청 — 지원 순서대로 예비. 상한(ApplyPolicy.MAX_WAITING)은 위에서 막았다
+        int waitingOrder = (int) waitingCount + 1;
         applicationRepository.save(application);
         log.info("지원 → 예비 {}번: applicationId={}, helpRequestId={}, helperId={}",
                 waitingOrder, application.getId(), helpRequestId, helperId);

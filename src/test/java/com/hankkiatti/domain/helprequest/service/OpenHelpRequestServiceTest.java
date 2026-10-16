@@ -12,6 +12,7 @@ import com.hankkiatti.domain.application.entity.Application;
 import com.hankkiatti.domain.application.entity.ApplyBlockReason;
 import com.hankkiatti.domain.application.entity.ApplyOutcome;
 import com.hankkiatti.domain.application.repository.ApplicationRepository;
+import com.hankkiatti.domain.application.repository.HelpRequestApplicationCount;
 import com.hankkiatti.domain.application.service.ApplyPolicy;
 import com.hankkiatti.domain.auth.exception.AuthErrorType;
 import com.hankkiatti.domain.auth.exception.AuthException;
@@ -153,6 +154,39 @@ class OpenHelpRequestServiceTest {
 
         // when & then
         assertThat(onlyCard().applyOutcome()).isEqualTo(ApplyOutcome.WAITING);
+    }
+
+    @Test
+    void getOpenRequests_예비3명찬매칭신청_BLOCKED이고WAITING_FULL() {
+        // given — 10번은 예비 3명, 11번은 예비 2명
+        givenHelper();
+        givenOpenRequests(matched(10L, NOON), matched(11L, NOON.plusDays(1)));
+        givenMyActive();
+        given(applicationRepository.countWaitingByHelpRequest(List.of(10L, 11L))).willReturn(List.of(
+                new HelpRequestApplicationCount(10L, 3), new HelpRequestApplicationCount(11L, 2)));
+
+        // when
+        List<OpenHelpRequestResponseDto> cards = cards(openHelpRequestService.getOpenRequests(HELPER_ID, null, null));
+
+        // then
+        assertThat(cards).extracting(OpenHelpRequestResponseDto::applyOutcome)
+                .containsExactly(ApplyOutcome.BLOCKED, ApplyOutcome.WAITING);
+        assertThat(cards).extracting(OpenHelpRequestResponseDto::blockReason)
+                .containsExactly(ApplyBlockReason.WAITING_FULL, null);
+    }
+
+    @Test
+    void getOpenRequests_모집중신청만_예비수를조회하지않음() {
+        // given
+        givenHelper();
+        givenOpenRequests(recruiting(10L, NOON));
+        givenMyActive();
+
+        // when
+        openHelpRequestService.getOpenRequests(HELPER_ID, null, null);
+
+        // then
+        verify(applicationRepository, never()).countWaitingByHelpRequest(any());
     }
 
     @Test
