@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 
 public interface PasswordResetTokenRepository extends JpaRepository<PasswordResetToken, Long> {
 
@@ -29,4 +30,13 @@ public interface PasswordResetTokenRepository extends JpaRepository<PasswordRese
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("update PasswordResetToken t set t.usedAt = :now where t.account.id = :accountId and t.usedAt is null")
     int invalidateAllByAccountId(@Param("accountId") Long accountId, @Param("now") LocalDateTime now);
+
+    /**
+     * 만료된 재설정 토큰을 지운다 (매일 정리 작업). 유효 시간이 30분이라 만료 뒤에는 쓸 수 없고,
+     * 재발송 간격 확인(PasswordResetService.RESEND_INTERVAL = 10분)도 만료된 토큰에는 닿지 않으므로 지워도 동작이 바뀌지 않는다.
+     */
+    @Transactional
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("delete from PasswordResetToken t where t.expiresAt <= :now")
+    int deleteExpired(@Param("now") LocalDateTime now);
 }
