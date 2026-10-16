@@ -102,7 +102,7 @@ domain/{도메인}/
 domain/
 ├── common/       BaseTimeEntity, LabeledEnum, AbstractEnumConverter, PhoneNumbers, PersonalInfoMasks(관리자 목록의 이메일·ID 가림), 공통 검증(@PhoneNumber·@KakaoId)
 ├── account/      Account, AccountRole, AccountStatus
-├── auth/         RefreshToken, PasswordResetToken, TokenAudience, 로그인·토큰·비밀번호 변경·재설정 API, 관리자가 발급하는 임시 비밀번호 생성(TemporaryPasswords — 장애학생 계정정보·도우미 임시 비밀번호가 같이 씀)
+├── auth/         RefreshToken, PasswordResetToken, TokenAudience, 로그인·토큰·비밀번호 변경·재설정 API, 관리자가 발급하는 임시 비밀번호 생성(TemporaryPasswords — 장애학생 계정정보·도우미 임시 비밀번호가 같이 씀), 만료 토큰 매일 정리(TokenCleanupJob 04:30 — 만료된 refresh·재설정 토큰 삭제, 폐기됐지만 만료 전인 refresh는 재사용 감지용으로 남김)
 ├── mail/         MailOutbox, 메일 아웃박스 적재·발송(MailOutboxService, MailRelay)
 ├── sms/          SmsOutbox, 문자 아웃박스 적재·발송(SmsOutboxService, SmsRelay), 발송부 SmsSender(AWS SNS 구현 SnsSmsSender), 문자 수신 동의 이력(SmsConsentChange·SmsConsentHistory)
 ├── notification/ Notification, NotificationType, NotificationTargetType, 인앱 알림 저장(NotificationService.notify)·목록(커서)·안 읽은 개수·읽음 API, 매칭·취소 이벤트 → 알림 작업 아웃박스(NotificationJob — NotificationJobRecorder가 업무 트랜잭션 안에서 저장 → NotificationJobRelay·Poller가 처리 → NotificationDispatcher, 문구는 `messages/notification.properties` — 키 = 알림 종류, NotificationMessages가 채운다)

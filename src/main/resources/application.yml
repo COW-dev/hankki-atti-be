@@ -22,6 +22,12 @@ spring:
       mail.smtp.writetimeout: 10000
   profiles:
     default: local
+  datasource:
+    hikari:
+      # 기본 10은 의식적으로 정한 값이 아니어서 명시한다. 쓰기 요청은 커밋 직후 알림 relay(REQUIRES_NEW)가 업무 커넥션을 반납하기 전에
+      # 두 번째 커넥션을 받으므로 요청 하나가 커넥션 2개를 쓸 수 있다. 여기에 스케줄러 4 + 메일 4 + 문자 2 스레드가 더해진다.
+      # MySQL max_connections 기본 151이라 서버 2대(40)도 여유가 있다. 꽉 차면 connection-timeout(기본 30초) 뒤 500
+      maximum-pool-size: 20
   jpa:
     open-in-view: false
     properties:
@@ -36,6 +42,9 @@ auth:
     issuer: hankki-atti
     access-token-ttl: 30m
     refresh-token-ttl: 14d
+  token-cleanup:
+    # 만료된 refresh·비밀번호 재설정 토큰을 매일 04:30에 지운다 (domain/auth/scheduler/TokenCleanupJob)
+    enabled: true
 
 mail:
   # Gmail은 로그인한 계정 주소로만 보낼 수 있어 계정 주소를 그대로 쓴다
