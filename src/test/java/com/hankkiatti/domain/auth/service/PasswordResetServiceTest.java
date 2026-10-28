@@ -80,6 +80,7 @@ class PasswordResetServiceTest {
         Clock clock = Clock.fixed(NOW.atZone(SEOUL).toInstant(), SEOUL);
         // 끝의 /는 링크를 만들 때 지운다
         MailProperties mailProperties = new MailProperties("no-reply@test", "한끼아띠", "https://app.example.org/",
+                "https://helper.example.org/",
                 new MailProperties.Outbox(20, List.of(Duration.ofMinutes(1)), Duration.ofMinutes(5)));
         passwordResetService = new PasswordResetService(accountRepository, studentRepository, helperRepository,
                 passwordResetTokenRepository, authTokenService, mailOutboxService, mailProperties, passwordEncoder,
@@ -142,7 +143,7 @@ class PasswordResetServiceTest {
     }
 
     @Test
-    void request_도우미_가입이메일로발송() {
+    void request_도우미_가입이메일로도우미앱링크발송() {
         // given
         Account account = TestAccounts.withId(2L, AccountRole.HELPER, "old-hash", false);
         given(accountRepository.findByLoginIdForUpdate("helper@mju.ac.kr")).willReturn(Optional.of(account));
@@ -154,7 +155,9 @@ class PasswordResetServiceTest {
         passwordResetService.request(new PasswordResetRequestDto("Helper@MJU.ac.kr"));
 
         // then
-        assertThat(sentMailBody("helper@mju.ac.kr", 2L)).contains(LINK_PREFIX);
+        assertThat(sentMailBody("helper@mju.ac.kr", 2L))
+                .contains("https://helper.example.org/password-reset#token=")
+                .doesNotContain(LINK_PREFIX);
     }
 
     @Test

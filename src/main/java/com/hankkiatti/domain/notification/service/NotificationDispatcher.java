@@ -1,5 +1,6 @@
 package com.hankkiatti.domain.notification.service;
 
+import com.hankkiatti.domain.account.entity.AccountRole;
 import com.hankkiatti.domain.application.entity.Application;
 import com.hankkiatti.domain.application.event.HelperConfirmedEvent;
 import com.hankkiatti.domain.application.repository.ApplicationRepository;
@@ -163,7 +164,7 @@ public class NotificationDispatcher {
         notificationService.notify(student.getAccountId(), type, message,
                 NotificationTargetType.HELP_REQUEST, request.getId());
         String phone = student.isSmsConsented() ? student.getPhone() : null;
-        outboxSender.send(type, new Recipient(student.getSchoolEmail(), phone), message,
+        outboxSender.send(type, new Recipient(AccountRole.STUDENT, student.getSchoolEmail(), phone), message,
                 request.getStartAt(), null, false, request.getId());
     }
 
@@ -178,7 +179,7 @@ public class NotificationDispatcher {
         notificationService.notify(helper.getAccountId(), type, message,
                 NotificationTargetType.APPLICATION, application.getId());
         String phone = helper.isSmsConsented() ? helper.getPhone() : null;
-        outboxSender.send(type, new Recipient(helper.getEmail(), phone), message,
+        outboxSender.send(type, new Recipient(AccountRole.HELPER, helper.getEmail(), phone), message,
                 application.getHelpRequest().getStartAt(), deadline, reminder, application.getId());
     }
 

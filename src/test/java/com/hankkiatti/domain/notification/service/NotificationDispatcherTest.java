@@ -183,7 +183,7 @@ class NotificationDispatcherTest {
         verifyToHelper(NotificationType.PROMOTION_RESPONSE_REQUIRED,
                 "다시 알려 드려요. 10월 12일(월) 12:00 신청에 예비에서 승격됐어요. 11:45까지 갈 수 있는지 알려 주세요.");
         verify(outboxSender).send(eq(NotificationType.PROMOTION_RESPONSE_REQUIRED),
-                eq(new Recipient(helper.getEmail(), helper.getPhone())), anyString(), eq(NOON),
+                eq(new Recipient(AccountRole.HELPER, helper.getEmail(), helper.getPhone())), anyString(), eq(NOON),
                 eq(NOON.minusMinutes(15)), eq(true), eq(APPLICATION_ID));
     }
 
@@ -238,10 +238,10 @@ class NotificationDispatcherTest {
 
         // then — 장애학생은 메일만, 동의한 도우미는 그대로
         verify(outboxSender).send(NotificationType.REQUEST_MATCHED,
-                new Recipient(student.getSchoolEmail(), null),
+                new Recipient(AccountRole.STUDENT, student.getSchoolEmail(), null),
                 "10월 12일(월) 12:00 식사 도우미가 매칭됐어요.", NOON, null, false, REQUEST_ID);
         verify(outboxSender).send(NotificationType.APPLICATION_MATCHED,
-                new Recipient(helper.getEmail(), helper.getPhone()),
+                new Recipient(AccountRole.HELPER, helper.getEmail(), helper.getPhone()),
                 "10월 12일(월) 12:00 식사 도우미로 매칭됐어요.", NOON, null, false, APPLICATION_ID);
     }
 
@@ -255,10 +255,10 @@ class NotificationDispatcherTest {
 
         // then — 장애학생은 학교 이메일·등록 전화번호, 도우미는 가입 이메일·전화번호. 보낼지는 Sender가 종류로 정한다
         verify(outboxSender).send(NotificationType.REQUEST_MATCHED,
-                new Recipient(student.getSchoolEmail(), student.getPhone()),
+                new Recipient(AccountRole.STUDENT, student.getSchoolEmail(), student.getPhone()),
                 "10월 12일(월) 12:00 식사 도우미가 매칭됐어요.", NOON, null, false, REQUEST_ID);
         verify(outboxSender).send(NotificationType.APPLICATION_MATCHED,
-                new Recipient(helper.getEmail(), helper.getPhone()),
+                new Recipient(AccountRole.HELPER, helper.getEmail(), helper.getPhone()),
                 "10월 12일(월) 12:00 식사 도우미로 매칭됐어요.", NOON, null, false, APPLICATION_ID);
     }
 

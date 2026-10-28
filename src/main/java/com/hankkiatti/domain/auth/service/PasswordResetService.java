@@ -1,6 +1,7 @@
 package com.hankkiatti.domain.auth.service;
 
 import com.hankkiatti.domain.account.entity.Account;
+import com.hankkiatti.domain.account.entity.AccountRole;
 import com.hankkiatti.domain.account.repository.AccountRepository;
 import com.hankkiatti.domain.auth.dto.request.PasswordResetConfirmRequestDto;
 import com.hankkiatti.domain.auth.dto.request.PasswordResetRequestDto;
@@ -28,7 +29,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.StringUtils;
 
 /**
  * 비밀번호 재설정 (기능명세서 "비밀번호 재설정", L-03). 장애학생·도우미만 쓴다 — 관리자는 비밀번호 찾기가 없다.
@@ -94,7 +94,7 @@ public class PasswordResetService {
         passwordResetTokenRepository.invalidateAllByAccountId(account.getId(), now);
         String rawToken = newToken();
         passwordResetTokenRepository.save(new PasswordResetToken(account, AuthTokenService.hash(rawToken), now));
-        mailOutboxService.enqueue(MailType.PASSWORD_RESET, recipient.get(), MAIL_SUBJECT, mailBody(rawToken),
+        mailOutboxService.enqueue(MailType.PASSWORD_RESET, recipient.get(), MAIL_SUBJECT, mailBody(account.getRole(), rawToken),
                 account.getId());
         // 아이디·이메일은 로그에 남기지 않는다
         log.info("비밀번호 재설정 메일 요청: accountId={}", account.getId());
@@ -157,8 +157,9 @@ public class PasswordResetService {
         };
     }
 
-    private String mailBody(String rawToken) {
-        String link = StringUtils.trimTrailingCharacter(mailProperties.linkBaseUrl(), '/') + LINK_PATH + rawToken;
+    // 재설정 화면은 받는 사람이 쓰는 앱(장애학생·도우미 서브도메인)에 있다
+    private String mailBody(AccountRole role, String rawToken) {
+        String link = mailProperties.appUrl(role) + LINK_PATH + rawToken;
         return """
                 한끼아띠 비밀번호 재설정을 요청하셨어요.
                 아래 링크에서 새 비밀번호를 정해 주세요. 링크는 30분 동안 한 번만 쓸 수 있어요.
