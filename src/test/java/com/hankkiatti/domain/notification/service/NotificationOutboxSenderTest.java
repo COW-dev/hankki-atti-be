@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
+import com.hankkiatti.domain.account.entity.AccountRole;
 import com.hankkiatti.domain.mail.entity.MailType;
 import com.hankkiatti.domain.mail.service.MailOutboxService;
 import com.hankkiatti.domain.mail.service.MailProperties;
@@ -31,7 +32,7 @@ class NotificationOutboxSenderTest {
 
     // 2026-10-12(월) 12:00
     private static final LocalDateTime NOON = LocalDateTime.of(2026, 10, 12, 12, 0);
-    private static final Recipient TO = new Recipient("60231234@mju.ac.kr", "010-1234-5678");
+    private static final Recipient TO = new Recipient(AccountRole.STUDENT, "60231234@mju.ac.kr", "010-1234-5678");
     private static final Set<NotificationType> URGENT = EnumSet.of(NotificationType.REQUEST_MATCHED,
             NotificationType.APPLICATION_MATCHED, NotificationType.PROMOTED,
             NotificationType.PROMOTION_RESPONSE_REQUIRED, NotificationType.STUDENT_CANCELED,
@@ -50,6 +51,7 @@ class NotificationOutboxSenderTest {
     @BeforeEach
     void setUp() {
         MailProperties mailProperties = new MailProperties("no-reply@test", "한끼아띠", "https://app.example.org/",
+                "https://helper.example.org/",
                 new MailProperties.Outbox(20, List.of(Duration.ofMinutes(1)), Duration.ofMinutes(5)));
         sender = new NotificationOutboxSender(mailOutboxService, smsOutboxService, mailProperties, messages);
     }
@@ -74,6 +76,21 @@ class NotificationOutboxSenderTest {
                 .contains("02-300-1529");
         verify(smsOutboxService).enqueue(SmsType.MATCHED, "010-1234-5678",
                 "[한끼아띠] 10월 12일(월) 12:00 식사 도우미가 매칭됐어요. 앱에서 확인해 주세요.", 10L);
+    }
+
+    @Test
+    void send_도우미_메일링크는도우미앱() {
+        // when
+        sender.send(NotificationType.APPLICATION_MATCHED, new Recipient(AccountRole.HELPER, "helper@mju.ac.kr", null),
+                "인앱 문장", NOON, null, false, 31L);
+
+        // then
+        ArgumentCaptor<String> body = ArgumentCaptor.forClass(String.class);
+        verify(mailOutboxService).enqueue(eq(MailType.MATCHED), eq("helper@mju.ac.kr"), anyString(), body.capture(),
+                eq(31L));
+        assertThat(body.getValue())
+                .contains("https://helper.example.org/")
+                .doesNotContain("https://app.example.org/");
     }
 
     @Test
@@ -107,7 +124,7 @@ class NotificationOutboxSenderTest {
     @Test
     void send_문자수신미동의_메일만적재하고문자는건너뛴다() {
         // when
-        sender.send(NotificationType.REQUEST_MATCHED, new Recipient("60231234@mju.ac.kr", null),
+        sender.send(NotificationType.REQUEST_MATCHED, new Recipient(AccountRole.STUDENT, "60231234@mju.ac.kr", null),
                 "10월 12일(월) 12:00 식사 도우미가 매칭됐어요.", NOON, null, false, 10L);
 
         // then

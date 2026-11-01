@@ -1,9 +1,11 @@
 package com.hankkiatti.domain.mail.service;
 
+import com.hankkiatti.domain.account.entity.AccountRole;
 import java.time.Duration;
 import java.util.List;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
+import org.springframework.util.StringUtils;
 
 /**
  * 메일 발송 설정. SMTP 접속 정보는 Spring 기본 설정(spring.mail.*)을 쓴다.
@@ -12,10 +14,17 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 public record MailProperties(
         @DefaultValue("no-reply@hankki-atti.local") String fromAddress,
         @DefaultValue("한끼아띠 (명지대학교 장애학생지원센터)") String fromName,
-        // 메일 본문 링크의 기준 주소 (사용자 앱 주소, 끝에 / 없이)
+        // 메일 본문 링크의 기준 주소 — 장애학생 앱 / 도우미 앱 (서브도메인이 다르다)
         @DefaultValue("http://localhost:3000") String linkBaseUrl,
+        @DefaultValue("http://helper.localhost:3000") String helperLinkBaseUrl,
         @DefaultValue Outbox outbox
 ) {
+
+    // 받는 사람이 쓰는 앱 주소 (끝의 / 제거)
+    public String appUrl(AccountRole role) {
+        String base = role == AccountRole.HELPER ? helperLinkBaseUrl : linkBaseUrl;
+        return StringUtils.trimTrailingCharacter(base, '/');
+    }
 
     public record Outbox(
             // 폴러가 한 번에 꺼내는 최대 건수

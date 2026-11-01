@@ -1,5 +1,6 @@
 package com.hankkiatti.domain.notification.service;
 
+import com.hankkiatti.domain.account.entity.AccountRole;
 import com.hankkiatti.domain.mail.entity.MailType;
 import com.hankkiatti.domain.mail.service.MailOutboxService;
 import com.hankkiatti.domain.mail.service.MailProperties;
@@ -10,7 +11,6 @@ import java.time.LocalDateTime;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
-import org.springframework.util.StringUtils;
 
 /**
  * 급한 알림 4종(매칭 완료·예비에서 승격·상대방 취소·매칭 실패)을 메일·문자 아웃박스에도 적재한다 (Notion 기능명세서 "이메일 알림",
@@ -56,7 +56,7 @@ public class NotificationOutboxSender {
             return;
         }
         mailOutboxService.enqueue(mailType, to.email(), messages.mailSubject(type, reminder),
-                messages.mailBody(inAppMessage, appLink()), referenceId);
+                messages.mailBody(inAppMessage, mailProperties.appUrl(to.role()) + "/"), referenceId);
         if (to.phone() == null) {
             // 문자 수신에 동의하지 않았다 — 메일·인앱만 (BE-83)
             return;
@@ -65,14 +65,9 @@ public class NotificationOutboxSender {
                 messages.sms(type, startAt, deadline, reminder), referenceId);
     }
 
-    // 앱 첫 화면 — 역할별 화면은 앱이 나눈다
-    private String appLink() {
-        return StringUtils.trimTrailingCharacter(mailProperties.linkBaseUrl(), '/') + "/";
-    }
-
     /**
      * 받는 사람 연락처. 장애학생은 학교 이메일·등록 전화번호, 도우미는 가입 이메일·전화번호 (요구사항 6장).
-     * 문자 수신에 동의하지 않았으면 phone은 null — 문자를 보내지 않는다.
+     * 문자 수신에 동의하지 않았으면 phone은 null — 문자를 보내지 않는다. 메일 링크는 role의 앱(서브도메인) 첫 화면.
      */
-    public record Recipient(String email, String phone) {}
+    public record Recipient(AccountRole role, String email, String phone) {}
 }
