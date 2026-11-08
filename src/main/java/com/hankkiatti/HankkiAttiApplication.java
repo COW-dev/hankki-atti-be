@@ -10,7 +10,7 @@ import org.springframework.boot.security.autoconfigure.UserDetailsServiceAutoCon
 public class HankkiAttiApplication {
 
     public static void main(String[] args) {
-        // 식사 시각·자동 완료 등 시간 기반 로직이 많아 서버 기본 타임존을 고정한다
+        // 실행 환경의 기본 타임존과 관계없이 식사 시각·자동 완료 처리를 한국 시각으로 계산한다
         TimeZone.setDefault(TimeZone.getTimeZone("Asia/Seoul"));
         SpringApplication.run(HankkiAttiApplication.class, args);
     }
