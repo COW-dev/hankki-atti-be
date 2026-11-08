@@ -215,3 +215,17 @@ jobs:
             org.opencontainers.image.version=${{ env.VERSION }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # 4. /k8s/atti-be.yaml 파일 내의 image 태그를 방금 푸시한 커밋 SHA 값으로 자동 수정
+      - name: Update BE Kubernetes Manifest
+        run: |
+          sed -i 's|image: ghcr.io/.*/hankki-atti-be:.*|image: ghcr.io/${{ github.repository_owner }}/hankki-atti-be:${{ github.sha }}|g' k8s/atti-be.yaml
+
+      # 5. 수정된 k8s/atti-be.yaml 파일을 레포지토리에 Commit & Push (ArgoCD가 감지하여 배포)
+      - name: Commit and Push Manifest Update
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add k8s/atti-be.yaml
+          git commit -m "chore(deploy): update BE image tag to ${{ github.sha }}" || exit 0
+          git push origin main
