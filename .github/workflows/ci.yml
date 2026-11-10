@@ -122,9 +122,9 @@ jobs:
     if: needs.version.outputs.release == 'true'
     needs: version
     runs-on: ubuntu-latest
-    # GITHUB_TOKEN으로 GHCR 이미지와 배포 매니페스트 커밋을 push한다
+    # GITHUB_TOKEN은 GHCR 이미지 push에만 사용한다
     permissions:
-      contents: write
+      contents: read
       packages: write
     env:
       # GHCR 경로는 소문자만 허용한다 (조직 COW-dev → cow-dev)
@@ -216,16 +216,11 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # k8s/atti-be.yaml의 이미지를 방금 push한 버전 태그로 맞춘다
-      - name: Update BE Kubernetes Manifest
-        run: |
-          sed -i "s|image: ghcr.io/.*/hankki-atti-be:.*|image: $IMAGE_NAME:$VERSION|g" k8s/atti-be.yaml
-
-      # 수정된 매니페스트를 커밋·push하면 Argo CD가 감지하여 배포한다
-      - name: Commit and Push Manifest Update
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add k8s/atti-be.yaml
-          git commit -m "ci: 백엔드 배포 이미지 $VERSION 반영" || exit 0
-          git push origin main
+  # 이미지 업로드 뒤 배포 저장소만 갱신한다. 실패하면 이 job만 재실행할 수 있다
+  deploy:
+    needs: [version, docker]
+    uses: ./.github/workflows/deploy.yml
+    with:
+      version: ${{ needs.version.outputs.version }}
+    secrets:
+      DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
