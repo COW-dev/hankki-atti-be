@@ -428,7 +428,7 @@ void apply_이미매칭된신청_예비번호부여() {
 
 ## 배포 (CD)
 
-main에 병합되고 CI 검사(`test`, `secret-scan`, `agent-config`)가 모두 통과하면 Docker 이미지를 GitHub Container Registry(GHCR)에 push한다. 서버 배포는 인프라 쪽 Argo CD가 맡는다.
+main에 병합되고 CI 검사(`test`, `secret-scan`, `agent-config`)가 모두 통과하면 Docker 이미지를 GitHub Container Registry(GHCR)에 push한다. 이후 별도 배포 저장소의 이미지 버전을 갱신하고 인프라 쪽 Argo CD가 서버에 반영한다. BE main에 매니페스트를 직접 push하지 않는다.
 
 | 항목 | 내용 |
 |---|---|
@@ -436,13 +436,14 @@ main에 병합되고 CI 검사(`test`, `secret-scan`, `agent-config`)가 모두 
 | 태그 | `vX.Y.Z` + `latest`. GHCR에는 불변 태그 설정이 없어, `docker` job이 같은 버전 태그가 이미 있으면 push하지 않고 실패한다 |
 | 플랫폼 | `linux/amd64`, `linux/arm64` |
 | 인증 | 별도 Secret 없음 — `docker` job의 `GITHUB_TOKEN`(`packages: write`)으로 push하고, 이때 패키지가 이 레포에 자동 연결된다. CI 밖에서 개인 토큰으로 먼저 push하면 레포에 연결되지 않은 패키지가 생겨 `GITHUB_TOKEN` push가 막히므로 직접 push하지 않는다 |
-| 워크플로우 | `.github/workflows/ci.yml`의 `version` → `docker` job, 버전 계산은 `.github/scripts/release-version.sh` |
+| 워크플로우 | `.github/workflows/ci.yml`의 `version` → `docker` → `deploy` job. 배포는 `.github/workflows/deploy.yml` 재사용, 버전 계산은 `.github/scripts/release-version.sh` |
+| 배포 저장소 | BE·FE 공용. Actions 변수 `DEPLOY_REPOSITORY`의 `main:k8s/be/atti-be.yaml`을 BE CI가 갱신하고 FE는 `k8s/fe`를 사용한다. push 인증은 배포 저장소에 등록한 deploy key와 BE Actions Secret `DEPLOY_SSH_KEY`. 연결 절차는 `docs/deployment.md` |
 
 **버전 규칙**
 - 병합마다 마이너를 올린다 (`v0.1.0` → `v0.2.0`). 마이너는 상한 없이 증가한다 (`v0.9.0` → `v0.10.0`)
 - 마지막 버전 이후 이미지에 들어가는 파일(`src/main`, `build.gradle`, `settings.gradle`, `gradle/`, `gradlew`, `Dockerfile`, `.dockerignore`)이 바뀌지 않았으면 배포하지 않는다 — 문서·CI·테스트만 바뀐 병합은 버전이 오르지 않는다
 - 메이저(`v1.0.0`)는 정식 운영 시작 때 사람이 main 커밋에 태그를 직접 찍는다. 이후 자동으로 `v1.1.0`부터 이어진다
-- git 태그를 먼저 push해 버전을 선점한 뒤 이미지를 push한다. 실패한 실행을 재실행하면 같은 버전으로 다시 시도한다
+- git 태그를 먼저 push해 버전을 선점한 뒤 이미지를 push한다. 이미지 업로드 전 실패는 같은 버전으로 재시도한다. 매니페스트 반영만 실패하면 `Re-run failed jobs`로 deploy만 재실행하거나 수동 `Deploy`에 기존 이미지 태그를 입력한다. 업로드된 버전이 있는 상태에서 전체 job을 재실행하면 중복 검사에 막힌다
 
 **push 전 스모크 테스트**: 단위 테스트는 H2로 돌기 때문에, `docker` job에서 MySQL 8.4를 띄우고 이미지를 `prod` 프로필로 실행해 `/actuator/health`가 UP인지 확인한다. 실패하면 push하지 않는다.
 

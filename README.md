@@ -33,6 +33,9 @@ Docker Desktop을 켠 상태에서 실행하면 `docker-compose.yml`의 MySQL �
 ## Docker 이미지
 main에 병합되고 CI가 통과하면 `ghcr.io/cow-dev/hankki-atti-be:vX.Y.Z`(+ `latest`)가 GitHub Container Registry에 올라갑니다. 버전·배포 규칙은 [AGENTS.md — 배포 (CD)](AGENTS.md#배포-cd)를 참고하세요.
 
+이후 CI가 별도 배포 저장소의 이미지 버전을 갱신하면 Argo CD가 반영합니다.
+최초 연결과 재시도 방법은 [배포 저장소 연결](docs/deployment.md)을 참고하세요.
+
 ```bash
 docker run -d -p 8080:8080 \
   -e SPRING_DATASOURCE_URL='jdbc:mysql://<host>:3306/hankki_atti_db?serverTimezone=Asia/Seoul&characterEncoding=UTF-8' \
